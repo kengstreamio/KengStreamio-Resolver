@@ -65,8 +65,10 @@ function parseDetail(html, baseUrl, detailUrl) {
   // ---- poster (og:image) ----
   const poster = ogImage ? absUrl(ogImage, baseUrl) : '';
 
-  // ---- Server tabs: span.get-eps[data-subsv-id] for display names ----
-  const serverTabs = [];
+  // ---- Server tabs: anime-1 detail page has NO server tabs (only watch page
+  // has span.get-eps). Servers are fixed: VIP 1 (sv1), VIP 2 (sv2), HX (sv3).
+  // First try parsing from watch page DOM; fallback to hardcoded list.
+  let serverTabs = [];
   const tabEls = doc.querySelectorAll('span.get-eps[data-subsv-id]');
   for (const tab of tabEls) {
     const svId = parseInt(tab.getAttribute('data-subsv-id') || '0', 10);
@@ -76,7 +78,12 @@ function parseDetail(html, baseUrl, detailUrl) {
     }
   }
   if (serverTabs.length === 0) {
-    serverTabs.push({ id: 1, name: 'Server 1' });
+    // Known anime-1 servers: VIP 1, VIP 2, HX (sv1, sv2, sv3)
+    serverTabs = [
+      { id: 1, name: 'VIP 1' },
+      { id: 2, name: 'VIP 2' },
+      { id: 3, name: 'HX' },
+    ];
   }
 
   // ---- Episodes: parse <a href> from li.halim-episode for REAL base URLs ----
