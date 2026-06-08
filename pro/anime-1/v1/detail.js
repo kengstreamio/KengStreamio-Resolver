@@ -14,7 +14,7 @@ async function getMovieDetail(url) {
   const u = new URL(url);
   const baseUrl = u.origin;
   const html = await fetchText(url);
-  const detail = parseDetail(html, baseUrl, url);
+  const detail = await parseDetail(html, baseUrl, url);
   return JSON.stringify(detail);
 }
 
@@ -37,7 +37,7 @@ function absUrl(url, baseUrl) {
   return baseUrl + '/' + url;
 }
 
-function parseDetail(html, baseUrl, detailUrl) {
+async function parseDetail(html, baseUrl, detailUrl) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
 
   // ---- meta tags (og:*) ----
@@ -65,32 +65,9 @@ function parseDetail(html, baseUrl, detailUrl) {
   // ---- poster (og:image) ----
   const poster = ogImage ? absUrl(ogImage, baseUrl) : '';
 
-  // ---- Server tabs: anime-1 detail page has NO server tabs (only watch page
-  // has span.get-eps). Servers are fixed: VIP 1 (sv1), VIP 2 (sv2), HX (sv3).
-  // First try parsing from watch page DOM; fallback to hardcoded list.
-  let serverTabs = [];
-  const tabEls = doc.querySelectorAll('span.get-eps[data-subsv-id]');
-  for (const tab of tabEls) {
-    const svId = parseInt(tab.getAttribute('data-subsv-id') || '0', 10);
-    const svName = cleanText(tab.textContent);
-    if (svId > 0 && svName) {
-      serverTabs.push({ id: svId, name: svName });
-    }
-  }
-  if (serverTabs.length === 0) {
-    // Known anime-1 servers: VIP 1, VIP 2, HX (sv1, sv2, sv3)
-    serverTabs = [
-      { id: 1, name: 'VIP 1' },
-      { id: 2, name: 'VIP 2' },
-      { id: 3, name: 'HX' },
-    ];
-  }
-
-  // ---- Episodes: parse <a href> from li.halim-episode for REAL base URLs ----
-  // CRITICAL: must use actual <a href> URLs (not construct from detailUrl)
-  // because detail URL path ≠ watch URL path.
-  // HTML only has sv1 links; we generate other servers by replacing sv ID.
-  const tapBases = new Map(); // tap -> first absolute URL from <a href>
+  // ---- Server tabs: detail page has NONE. Must fetch watch page to get them.
+  // Step 1: collect episode URLs from detail page first (need at least one for watch URL)
+  const tapBases = new Map(); // tap -> { svId, url }
   const epLis = doc.querySelectorAll('li.halim-episode');
   for (const li of epLis) {
     const a = li.querySelector('a[href]');
@@ -105,22 +82,35 @@ function parseDetail(html, baseUrl, detailUrl) {
     }
   }
 
-  // Fallback: if no <a href> found, try span[data-episode-slug] + derive URLs
-  if (tapBases.size === 0) {
-    const seenTaps = new Set();
-    const epSpans = doc.querySelectorAll('span[data-episode-slug]');
-    for (const span of epSpans) {
-      const slug = span.getAttribute('data-episode-slug') || '';
-      const m2 = slug.match(/tap-(\d+)/);
-      if (m2) {
-        const tap = parseInt(m2[1], 10);
-        if (!seenTaps.has(tap)) seenTaps.add(tap);
+  // Step 2: fetch a watch page to get server tabs from #halim-ajax-list-server
+  let serverTabs = [];
+  // Pick first available watch URL (lowest tap number)
+  const firstTap = tapBases.size > 0
+    ? Array.from(tapBases.entries()).sort((a, b) => a[0] - b[0])[0][1].url
+    : null;
+  if (firstTap) {
+    try {
+      const watchHtml = await fetchText(firstTap);
+      const watchDoc = new DOMParser().parseFromString(watchHtml, 'text/html');
+      const container = watchDoc.querySelector('#halim-ajax-list-server');
+      if (container) {
+        const tabEls = container.querySelectorAll('span.get-eps[data-subsv-id]');
+        for (const tab of tabEls) {
+          const svId = parseInt(tab.getAttribute('data-subsv-id') || '0', 10);
+          const svName = cleanText(tab.textContent);
+          if (svId > 0 && svName) {
+            serverTabs.push({ id: svId, name: svName });
+          }
+        }
       }
-    }
-    const watchPath = detailUrl.replace(/\/tap-\d+-sv\d+\.html$/, '/');
-    for (const tap of seenTaps) {
-      tapBases.set(tap, { svId: 1, url: watchPath + `tap-${tap}-sv1.html` });
-    }
+    } catch (_) { /* ignore fetch error, fallback below */ }
+  }
+  if (serverTabs.length === 0) {
+    serverTabs = [
+      { id: 1, name: 'VIP 1' },
+      { id: 2, name: 'VIP 2' },
+      { id: 3, name: 'HX' },
+    ];
   }
 
   // Build episodes: cross-product tap × servers, replacing sv ID in URL
