@@ -1,1 +1,181 @@
-async function railGroupHome(t){function e(t){return String(t??"").replace(/\s+/g," ").trim()}function r(t,r){const n=e(r);if(!n)return"";try{return new URL(n,t).href}catch(t){return n}}function n(t){try{console.log("[KENG][anime-1][railGroupHome] "+t)}catch(t){}}try{const i=function(t){return"string"==typeof t&&/^https?:\/\//i.test(t)?t.replace(/\/+$/,""):"undefined"!=typeof location&&location.origin?location.origin.replace(/\/+$/,""):""}(t);if(n("start siteBase="+i),!i)throw new Error("Invalid baseUrl");const o=await fetch(i+"/",{headers:{"User-Agent":"Mozilla/5.0"},credentials:"include"});if(!o.ok)throw new Error("Fetch home failed: "+o.status);const l=await o.text();n("html len="+l.length);const a=(new DOMParser).parseFromString(l,"text/html"),s=function(t,i){const o=t.querySelectorAll(".halim-trending-card");n("trending raw cards="+o.length);const l=[];return o.forEach(t=>{const n=t.querySelector("a.halim-trending-link");if(!n)return;const o=e(n.getAttribute("href")||"");if(!o)return;const a=t.querySelector("img.halim-trending-poster-image"),s=a?e(a.getAttribute("src")||a.getAttribute("data-src")||""):"",c=t.querySelector(".halim-trending-rating-value"),u=c?e(c.textContent):"",h=t.querySelector(".halim-trending-number"),g=h&&parseInt(e(h.textContent),10)||0,m=t.querySelector(".halim-trending-title-text");let d=m?e(m.textContent):"";!d&&a&&(d=e(a.getAttribute("alt")||""));const _=t.querySelector(".halim-trending-original-title"),p=_?e(_.textContent):"";d&&((d+" "+p).toLowerCase().includes("trailer")||l.push({rank:g,title:d,title_original:p,poster_url:r(i,s),thumbnail_url:r(i,s),url:r(i,o),media_type:"series",badge_text:"",badge_sub:"",year:"",rating:u,synopsis:"",age_rating:"",episode_current:"",genres:[]}))}),n("trending parsed="+l.length),l}(a,i),c=function(t,i){const o=t.querySelectorAll(".section-bar .section-title");let l=null;if(o.forEach(t=>{e(t.textContent).toLowerCase().includes("mới cập nhật")&&(l=t.closest(".halim_box")||t.parentElement)}),!l)return n("new updates section not found"),[];const a=l.querySelectorAll("article.halim-item, article.thumb, article.grid-item");n("new updates raw articles="+a.length);const s=[];return a.forEach(t=>{const n=t.querySelector(".halim-item")||t,o=n.querySelector("a.halim-thumb");if(!o)return;const l=e(o.getAttribute("href")||"");if(!l)return;const a=n.querySelector("img.img-responsive"),c=a?e(a.getAttribute("data-src")||a.getAttribute("src")||""):"",u=n.querySelector(".status"),h=u?e(u.textContent):"",g=n.querySelector(".episode"),m=g?e(g.textContent):"",d=n.querySelector(".entry-title");let _=e(d?d.textContent:o.getAttribute("title")||"");_||(_=e(o.getAttribute("title")||""));const p=n.querySelector(".original_title"),y=p?e(p.textContent):"";_&&((_+" "+y).toLowerCase().includes("trailer")||s.push({rank:0,title:_,title_original:y,poster_url:r(i,c),thumbnail_url:r(i,c),url:r(i,l),media_type:"series",badge_text:m,badge_sub:h,year:"",rating:"",synopsis:"",age_rating:"",episode_current:m,genres:[]}))}),n("new updates parsed="+s.length),s}(a,i),u=[];return s.length&&u.push({id:"phim_thinh_hanh",title:"Phim Thịnh Hành",subtitle:null,card_height_percent:.22,card_size_ratio:.667,is_hero_source:!0,show_rank:!0,movies:s,show_cta:null}),c.length&&u.push(function(t){return{id:"phim_moi_cap_nhat",title:"Phim Mới Cập Nhật",subtitle:null,card_height_percent:.18,card_size_ratio:.667,is_hero_source:!1,show_rank:!1,movies:t,show_cta:null}}(c)),n("success rails="+u.length+" totalMovies="+(s.length+c.length)),JSON.stringify(u)}catch(t){return n("error "+(t&&t.message?t.message:String(t))),JSON.stringify({error:t&&t.message?t.message:String(t)})}}
+async function railGroupHome(baseUrl) {
+  function resolveBaseUrl(baseUrl) {
+    if (typeof baseUrl === 'string' && /^https?:\/\//i.test(baseUrl)) {
+      return baseUrl.replace(/\/+$/, '');
+    }
+    if (typeof location !== 'undefined' && location.origin) {
+      return location.origin.replace(/\/+$/, '');
+    }
+    return '';
+  }
+
+  function cleanText(value) {
+    return String(value ?? '').replace(/\s+/g, ' ').trim();
+  }
+
+  function absUrl(baseUrl, url) {
+    const text = cleanText(url);
+    if (!text) return '';
+    try { return new URL(text, baseUrl).href; } catch (_e) { return text; }
+  }
+
+  function logRail(message) {
+    try { console.log('[KENG][anime-1][railGroupHome] ' + message); } catch (_e) {}
+  }
+
+  // -------- Trending (Đang thịnh hành) --------
+  function parseTrending(doc, siteBase) {
+    const cards = doc.querySelectorAll('.halim-trending-card');
+    logRail('trending raw cards=' + cards.length);
+    const items = [];
+    cards.forEach((card) => {
+      const link = card.querySelector('a.halim-trending-link');
+      if (!link) return;
+      const href = cleanText(link.getAttribute('href') || '');
+      if (!href) return;
+      const img = card.querySelector('img.halim-trending-poster-image');
+      const posterUrl = img ? cleanText(img.getAttribute('src') || img.getAttribute('data-src') || '') : '';
+      const ratingEl = card.querySelector('.halim-trending-rating-value');
+      const rating = ratingEl ? cleanText(ratingEl.textContent) : '';
+      const numberEl = card.querySelector('.halim-trending-number');
+      const rank = numberEl ? (parseInt(cleanText(numberEl.textContent), 10) || 0) : 0;
+      const titleEl = card.querySelector('.halim-trending-title-text');
+      let title = titleEl ? cleanText(titleEl.textContent) : '';
+      if (!title && img) title = cleanText(img.getAttribute('alt') || '');
+      const origEl = card.querySelector('.halim-trending-original-title');
+      const titleOriginal = origEl ? cleanText(origEl.textContent) : '';
+      if (!title) return;
+      if ((title + ' ' + titleOriginal).toLowerCase().includes('trailer')) return;
+      items.push({
+        rank: rank,
+        title: title,
+        title_original: titleOriginal,
+        poster_url: absUrl(siteBase, posterUrl),
+        thumbnail_url: absUrl(siteBase, posterUrl),
+        url: absUrl(siteBase, href),
+        media_type: 'series',
+        badge_text: '',
+        badge_sub: '',
+        year: '',
+        rating: rating,
+        synopsis: '',
+        age_rating: '',
+        episode_current: '',
+        genres: []
+      });
+    });
+    logRail('trending parsed=' + items.length);
+    return items;
+  }
+
+  // -------- Mới Cập Nhật (Newly Updated) --------
+  function parseNewUpdates(doc, siteBase) {
+    const sectionTitles = doc.querySelectorAll('.section-bar .section-title');
+    let targetBox = null;
+    sectionTitles.forEach((titleEl) => {
+      const txt = cleanText(titleEl.textContent).toLowerCase();
+      if (txt.includes('mới cập nhật')) {
+        targetBox = titleEl.closest('.halim_box') || titleEl.parentElement;
+      }
+    });
+    if (!targetBox) {
+      logRail('new updates section not found');
+      return [];
+    }
+    const articles = targetBox.querySelectorAll('article.halim-item, article.thumb, article.grid-item');
+    logRail('new updates raw articles=' + articles.length);
+    const items = [];
+    articles.forEach((article) => {
+      const inner = article.querySelector('.halim-item') || article;
+      const a = inner.querySelector('a.halim-thumb');
+      if (!a) return;
+      const href = cleanText(a.getAttribute('href') || '');
+      if (!href) return;
+      const img = inner.querySelector('img.img-responsive');
+      const posterUrl = img ? cleanText(img.getAttribute('data-src') || img.getAttribute('src') || '') : '';
+      const statusEl = inner.querySelector('.status');
+      const status = statusEl ? cleanText(statusEl.textContent) : '';
+      const episodeEl = inner.querySelector('.episode');
+      const episode = episodeEl ? cleanText(episodeEl.textContent) : '';
+      const entryTitleEl = inner.querySelector('.entry-title');
+      let title = entryTitleEl ? cleanText(entryTitleEl.textContent) : cleanText(a.getAttribute('title') || '');
+      if (!title) title = cleanText(a.getAttribute('title') || '');
+      const origEl = inner.querySelector('.original_title');
+      const titleOriginal = origEl ? cleanText(origEl.textContent) : '';
+      if (!title) return;
+      if ((title + ' ' + titleOriginal).toLowerCase().includes('trailer')) return;
+      items.push({
+        rank: 0,
+        title: title,
+        title_original: titleOriginal,
+        poster_url: absUrl(siteBase, posterUrl),
+        thumbnail_url: absUrl(siteBase, posterUrl),
+        url: absUrl(siteBase, href),
+        media_type: 'series',
+        badge_text: episode,
+        badge_sub: status,
+        year: '',
+        rating: '',
+        synopsis: '',
+        age_rating: '',
+        episode_current: episode,
+        genres: []
+      });
+    });
+    logRail('new updates parsed=' + items.length);
+    return items;
+  }
+
+  function makeTrendingRail(movies) {
+    return {
+      id: 'phim_thinh_hanh',
+      title: 'Phim Thịnh Hành',
+      subtitle: null,
+      card_height_percent: 0.22,
+      card_size_ratio: 0.667,
+      is_hero_source: true,
+      show_rank: true,
+      movies: movies,
+      show_cta: null
+    };
+  }
+
+  function makeNewUpdatesRail(movies) {
+    return {
+      id: 'phim_moi_cap_nhat',
+      title: 'Phim Mới Cập Nhật',
+      subtitle: null,
+      card_height_percent: 0.18,
+      card_size_ratio: 0.667,
+      is_hero_source: false,
+      show_rank: false,
+      movies: movies,
+      show_cta: null
+    };
+  }
+
+  try {
+    const siteBase = resolveBaseUrl(baseUrl);
+    logRail('start siteBase=' + siteBase);
+    if (!siteBase) throw new Error('Invalid baseUrl');
+    const res = await fetch(siteBase + '/', {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      credentials: 'include'
+    });
+    if (!res.ok) throw new Error('Fetch home failed: ' + res.status);
+    const html = await res.text();
+    logRail('html len=' + html.length);
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const trending = parseTrending(doc, siteBase);
+    const newUpdates = parseNewUpdates(doc, siteBase);
+    const rails = [];
+    if (trending.length) rails.push(makeTrendingRail(trending));
+    if (newUpdates.length) rails.push(makeNewUpdatesRail(newUpdates));
+    logRail('success rails=' + rails.length + ' totalMovies=' + (trending.length + newUpdates.length));
+    return JSON.stringify(rails);
+  } catch (e) {
+    logRail('error ' + (e && e.message ? e.message : String(e)));
+    return JSON.stringify({ error: e && e.message ? e.message : String(e) });
+  }
+}

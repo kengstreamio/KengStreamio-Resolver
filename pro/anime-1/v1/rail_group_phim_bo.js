@@ -1,1 +1,134 @@
-const PHIM_BO_CATEGORIES=[{id:"huyen_huyen",title:"Huyền Huyễn",slug:"huyen-huyen"},{id:"xuyen_khong",title:"Xuyên Không",slug:"xuyen-khong"},{id:"trung_sinh",title:"Trùng Sinh",slug:"trung-sinh"},{id:"tien_hiep",title:"Tiên Hiệp",slug:"tien-hiep"},{id:"co_trang",title:"Cổ Trang",slug:"co-trang"},{id:"hai_huoc",title:"Hài Hước",slug:"hai-huoc"},{id:"kiem_hiep",title:"Kiếm Hiệp",slug:"kiem-hiep"},{id:"hien_dai",title:"Hiện Đại",slug:"hien-dai"}];async function railGroupPhimBo(t){const e=PHIM_BO_CATEGORIES.map(e=>fetchText(`${t}/${e.slug}`)),n=await Promise.all(e),i=PHIM_BO_CATEGORIES.map((e,i)=>({id:`phim_bo_${e.id}`,title:e.title,subtitle:"Phim bộ mới nhất",card_height_percent:.18,card_size_ratio:.667,is_hero_source:!1,show_rank:!1,show_cta:{js_method:`getAll${capitalize(e.id)}`},movies:parseGenericList(n[i],t,20)}));return JSON.stringify(i)}async function getAllHuyenHuyen(t,e){return getCategoryPage(t,"huyen-huyen",e)}async function getAllXuyenKhong(t,e){return getCategoryPage(t,"xuyen-khong",e)}async function getAllTrungSinh(t,e){return getCategoryPage(t,"trung-sinh",e)}async function getAllTienHiep(t,e){return getCategoryPage(t,"tien-hiep",e)}async function getAllCoTrang(t,e){return getCategoryPage(t,"co-trang",e)}async function getAllHaiHuoc(t,e){return getCategoryPage(t,"hai-huoc",e)}async function getAllKiemHiep(t,e){return getCategoryPage(t,"kiem-hiep",e)}async function getAllHienDai(t,e){return getCategoryPage(t,"hien-dai",e)}async function getCategoryPage(t,e,n){const i=Math.max(1,parseInt(n||1,10)),r=i<=1?`${t}/${e}`:`${t}/${e}/page/${i}`,a=await fetchText(r);return JSON.stringify(parseGenericList(a,t,20))}async function fetchText(t){const e=await fetch(t,{credentials:"omit"});if(!e.ok)throw new Error(`Fetch failed: ${t} -> HTTP ${e.status}`);return await e.text()}function capitalize(t){return t.split("_").map(t=>t.charAt(0).toUpperCase()+t.slice(1)).join("")}function cleanText(t){return(t||"").replace(/\s+/g," ").trim()}function absUrl(t,e){return t?t.startsWith("http://")||t.startsWith("https://")?t:t.startsWith("//")?"https:"+t:t.startsWith("/")?e+t:e+"/"+t:""}function extractMovieFromCard(t,e,n){const i=t.querySelector("a.halim-thumb");if(!i)return null;const r=i.getAttribute("href")||"",a=cleanText(i.getAttribute("title")||"");if(!r||!a)return null;const s=t.querySelector("figure img");let u="";s&&(u=s.getAttribute("src")||s.getAttribute("data-src")||s.getAttribute("data-lazy-src")||"");const o=t.querySelector("span.episode"),l=o?cleanText(o.textContent):"",c=t.querySelector("span.status"),g=c?cleanText(c.textContent):"",h=t.querySelector("span.original_title"),y=h?cleanText(h.textContent):"";let p="series";return l.toLowerCase().includes("full")&&(p="movie"),{rank:n||0,title:a,title_original:y,poster_url:u?absUrl(u,e):"",thumbnail_url:u?absUrl(u,e):"",url:absUrl(r,e),media_type:p,badge_text:l,badge_sub:g,year:"",rating:"",synopsis:"",age_rating:"",episode_current:l,genres:[]}}function parseGenericList(t,e,n){const i=(new DOMParser).parseFromString(t,"text/html").querySelectorAll("article.thumb.grid-item"),r=[];for(const t of i){if(r.length>=n)break;const i=extractMovieFromCard(t,e,0);i&&r.push(i)}return r}
+// Provider: anime-1
+// Rail group: Phim Bộ - 8 categories (genres)
+//   Huyền Huyễn  -> /huyen-huyen
+//   Xuyên Không  -> /xuyen-khong
+//   Trùng Sinh   -> /trung-sinh
+//   Tiên Hiệp    -> /tien-hiep
+//   Cổ Trang     -> /co-trang
+//   Hài Hước     -> /hai-huoc
+//   Kiếm Hiệp    -> /kiem-hiep
+//   Hiện Đại     -> /hien-dai
+// Sort: mới nhất (newest first, default sort)
+// Each rail returns 20 movies + CTA to paginate.
+// v6.1 contract: baseUrl dynamic, CTA functions embedded in same file.
+
+const PHIM_BO_CATEGORIES = [
+  { id: 'huyen_huyen', title: 'Huyền Huyễn',  slug: 'huyen-huyen' },
+  { id: 'xuyen_khong', title: 'Xuyên Không',  slug: 'xuyen-khong' },
+  { id: 'trung_sinh',  title: 'Trùng Sinh',   slug: 'trung-sinh' },
+  { id: 'tien_hiep',   title: 'Tiên Hiệp',    slug: 'tien-hiep' },
+  { id: 'co_trang',    title: 'Cổ Trang',     slug: 'co-trang' },
+  { id: 'hai_huoc',    title: 'Hài Hước',     slug: 'hai-huoc' },
+  { id: 'kiem_hiep',   title: 'Kiếm Hiệp',    slug: 'kiem-hiep' },
+  { id: 'hien_dai',    title: 'Hiện Đại',     slug: 'hien-dai' },
+];
+
+async function railGroupPhimBo(baseUrl) {
+  // Fetch all 8 category pages in parallel.
+  const fetches = PHIM_BO_CATEGORIES.map(c => fetchText(`${baseUrl}/${c.slug}`));
+  const htmls = await Promise.all(fetches);
+
+  const rails = PHIM_BO_CATEGORIES.map((cat, i) => ({
+    id: `phim_bo_${cat.id}`,
+    title: cat.title,
+    subtitle: 'Phim bộ mới nhất',
+    card_height_percent: 0.18,
+    card_size_ratio: 0.667,
+    is_hero_source: false,
+    show_rank: false,
+    show_cta: { js_method: `getAll${capitalize(cat.id)}` },
+    movies: parseGenericList(htmls[i], baseUrl, 20),
+  }));
+
+  return JSON.stringify(rails);
+}
+
+// ===== CTA functions - one per category =====
+async function getAllHuyenHuyen(baseUrl, page)   { return getCategoryPage(baseUrl, 'huyen-huyen',  page); }
+async function getAllXuyenKhong(baseUrl, page)   { return getCategoryPage(baseUrl, 'xuyen-khong',  page); }
+async function getAllTrungSinh(baseUrl, page)    { return getCategoryPage(baseUrl, 'trung-sinh',   page); }
+async function getAllTienHiep(baseUrl, page)     { return getCategoryPage(baseUrl, 'tien-hiep',    page); }
+async function getAllCoTrang(baseUrl, page)      { return getCategoryPage(baseUrl, 'co-trang',     page); }
+async function getAllHaiHuoc(baseUrl, page)      { return getCategoryPage(baseUrl, 'hai-huoc',     page); }
+async function getAllKiemHiep(baseUrl, page)     { return getCategoryPage(baseUrl, 'kiem-hiep',    page); }
+async function getAllHienDai(baseUrl, page)      { return getCategoryPage(baseUrl, 'hien-dai',     page); }
+
+async function getCategoryPage(baseUrl, slug, page) {
+  const p = Math.max(1, parseInt(page || 1, 10));
+  const url = p <= 1 ? `${baseUrl}/${slug}` : `${baseUrl}/${slug}/page/${p}`;
+  const html = await fetchText(url);
+  return JSON.stringify(parseGenericList(html, baseUrl, 20));
+}
+
+// ===== Helpers =====
+async function fetchText(url) {
+  const resp = await fetch(url, { credentials: 'omit' });
+  if (!resp.ok) throw new Error(`Fetch failed: ${url} -> HTTP ${resp.status}`);
+  return await resp.text();
+}
+
+function capitalize(s) {
+  return s.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('');
+}
+
+function cleanText(s) {
+  return (s || '').replace(/\s+/g, ' ').trim();
+}
+
+function absUrl(url, baseUrl) {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  if (url.startsWith('//')) return 'https:' + url;
+  if (url.startsWith('/')) return baseUrl + url;
+  return baseUrl + '/' + url;
+}
+
+function extractMovieFromCard(article, baseUrl, rank) {
+  const a = article.querySelector('a.halim-thumb');
+  if (!a) return null;
+  const href = a.getAttribute('href') || '';
+  const title = cleanText(a.getAttribute('title') || '');
+  if (!href || !title) return null;
+  const img = article.querySelector('figure img');
+  let poster = '';
+  if (img) {
+    poster = img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-lazy-src') || '';
+  }
+  const episodeEl = article.querySelector('span.episode');
+  const episode = episodeEl ? cleanText(episodeEl.textContent) : '';
+  const statusEl = article.querySelector('span.status');
+  const status = statusEl ? cleanText(statusEl.textContent) : '';
+  const origEl = article.querySelector('span.original_title');
+  const titleOriginal = origEl ? cleanText(origEl.textContent) : '';
+  let mediaType = 'series';
+  if (episode.toLowerCase().includes('full')) mediaType = 'movie';
+  return {
+    rank: rank || 0,
+    title: title,
+    title_original: titleOriginal,
+    poster_url: poster ? absUrl(poster, baseUrl) : '',
+    thumbnail_url: poster ? absUrl(poster, baseUrl) : '',
+    url: absUrl(href, baseUrl),
+    media_type: mediaType,
+    badge_text: episode,
+    badge_sub: status,
+    year: '',
+    rating: '',
+    synopsis: '',
+    age_rating: '',
+    episode_current: episode,
+    genres: []
+  };
+}
+
+function parseGenericList(html, baseUrl, limit) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const articles = doc.querySelectorAll('article.thumb.grid-item');
+  const movies = [];
+  for (const art of articles) {
+    if (movies.length >= limit) break;
+    const m = extractMovieFromCard(art, baseUrl, 0);
+    if (m) movies.push(m);
+  }
+  return movies;
+}

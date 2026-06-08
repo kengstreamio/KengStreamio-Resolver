@@ -1,1 +1,118 @@
-async function filterMovies(t,e,r,i,n,a,s,l,o,u,c,g,h){h=Math.max(1,parseInt(h||1,10));const p=t.replace(/\/+$/,""),b="phim-hoat-hinh-3d-le",_=h<=1?`${p}/${b}`:`${p}/${b}/page/${h}`;try{const t=await fetchText(_),e=parseGenericList(t,p,32).map((t,e)=>({rank:32*(h-1)+e+1,title:t.title||"",title_original:t.title_original||"",poster_url:t.poster_url||"",thumbnail_url:t.thumbnail_url||"",url:t.url||"",media_type:"movie",badge_text:t.badge_text||"",badge_sub:t.badge_sub||"",year:t.year||"",rating:t.rating||"",synopsis:t.synopsis||"",age_rating:t.age_rating||"",episode_current:t.episode_current||"",genres:t.genres||[]}));return JSON.stringify(e)}catch(t){return JSON.stringify([])}}async function fetchText(t){const e=await fetch(t,{credentials:"omit"});if(!e.ok)throw new Error(`Fetch failed: ${t} -> HTTP ${e.status}`);return await e.text()}function cleanText(t){return(t||"").replace(/\s+/g," ").trim()}function absUrl(t,e){return t?t.startsWith("http://")||t.startsWith("https://")?t:t.startsWith("//")?"https:"+t:t.startsWith("/")?e+t:e+"/"+t:""}function extractMovieFromCard(t,e,r){const i=t.querySelector("a.halim-thumb");if(!i)return null;const n=i.getAttribute("href")||"",a=cleanText(i.getAttribute("title")||"");if(!n||!a)return null;const s=t.querySelector("figure img");let l="";s&&(l=s.getAttribute("src")||s.getAttribute("data-src")||s.getAttribute("data-lazy-src")||"");const o=t.querySelector("span.episode"),u=o?cleanText(o.textContent):"",c=t.querySelector("span.status"),g=c?cleanText(c.textContent):"",h=t.querySelector("span.original_title"),p=h?cleanText(h.textContent):"";let b="movie";return u.toLowerCase().includes("full")&&(b="movie"),{rank:r||0,title:a,title_original:p,poster_url:l?absUrl(l,e):"",thumbnail_url:l?absUrl(l,e):"",url:absUrl(n,e),media_type:b,badge_text:u,badge_sub:g,year:"",rating:"",synopsis:"",age_rating:"",episode_current:u,genres:[]}}function parseGenericList(t,e,r){const i=(new DOMParser).parseFromString(t,"text/html").querySelectorAll("article.thumb.grid-item"),n=[];for(const t of i){if(n.length>=r)break;const i=extractMovieFromCard(t,e,0);i&&n.push(i)}return n}
+// Provider: anime-1
+// Standalone: Filter Movies
+// Function: filterMovies(baseUrl, sortIdx, sortVal, countryId, countryIdx, countryVal, yearId, yearIdx, yearVal, genreId, genreIdx, genreVal, page) -> JSON string
+// HalimMovies WordPress: uses /phim-hoat-hinh-3d-le/page/{N} (phim lẻ page)
+// Sort/country/year params accepted for API compatibility but not supported on this site.
+// v6.1 contract: baseUrl dynamic.
+
+async function filterMovies(baseUrl, 
+    sortIdx,   sortVal,
+    countryId, countryIdx, countryVal,
+    yearId,    yearIdx,    yearVal,
+    genreId,   genreIdx,   genreVal,
+    page
+) {
+  page = Math.max(1, parseInt(page || 1, 10));
+  const base = baseUrl.replace(/\/+$/, '');
+
+  // WordPress category for phim lẻ: /phim-hoat-hinh-3d-le
+  const MOVIE_SLUG = 'phim-hoat-hinh-3d-le';
+  const url = page <= 1
+    ? `${base}/${MOVIE_SLUG}`
+    : `${base}/${MOVIE_SLUG}/page/${page}`;
+
+  try {
+    const html = await fetchText(url);
+    const movies = parseGenericList(html, base, 32);
+    const result = movies.map((m, i) => ({
+      rank: (page - 1) * 32 + i + 1,
+      title: m.title || '',
+      title_original: m.title_original || '',
+      poster_url: m.poster_url || '',
+      thumbnail_url: m.thumbnail_url || '',
+      url: m.url || '',
+      media_type: 'movie',
+      badge_text: m.badge_text || '',
+      badge_sub: m.badge_sub || '',
+      year: m.year || '',
+      rating: m.rating || '',
+      synopsis: m.synopsis || '',
+      age_rating: m.age_rating || '',
+      episode_current: m.episode_current || '',
+      genres: m.genres || []
+    }));
+    return JSON.stringify(result);
+  } catch (e) {
+    return JSON.stringify([]);
+  }
+}
+
+// ===== Helpers =====
+
+async function fetchText(url) {
+  const resp = await fetch(url, { credentials: 'omit' });
+  if (!resp.ok) throw new Error(`Fetch failed: ${url} -> HTTP ${resp.status}`);
+  return await resp.text();
+}
+
+function cleanText(s) {
+  return (s || '').replace(/\s+/g, ' ').trim();
+}
+
+function absUrl(url, baseUrl) {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  if (url.startsWith('//')) return 'https:' + url;
+  if (url.startsWith('/')) return baseUrl + url;
+  return baseUrl + '/' + url;
+}
+
+function extractMovieFromCard(article, baseUrl, rank) {
+  const a = article.querySelector('a.halim-thumb');
+  if (!a) return null;
+  const href = a.getAttribute('href') || '';
+  const title = cleanText(a.getAttribute('title') || '');
+  if (!href || !title) return null;
+  const img = article.querySelector('figure img');
+  let poster = '';
+  if (img) {
+    poster = img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-lazy-src') || '';
+  }
+  const episodeEl = article.querySelector('span.episode');
+  const episode = episodeEl ? cleanText(episodeEl.textContent) : '';
+  const statusEl = article.querySelector('span.status');
+  const status = statusEl ? cleanText(statusEl.textContent) : '';
+  const origEl = article.querySelector('span.original_title');
+  const titleOriginal = origEl ? cleanText(origEl.textContent) : '';
+  let mediaType = 'movie';
+  if (episode.toLowerCase().includes('full')) mediaType = 'movie';
+  return {
+    rank: rank || 0,
+    title: title,
+    title_original: titleOriginal,
+    poster_url: poster ? absUrl(poster, baseUrl) : '',
+    thumbnail_url: poster ? absUrl(poster, baseUrl) : '',
+    url: absUrl(href, baseUrl),
+    media_type: mediaType,
+    badge_text: episode,
+    badge_sub: status,
+    year: '',
+    rating: '',
+    synopsis: '',
+    age_rating: '',
+    episode_current: episode,
+    genres: []
+  };
+}
+
+function parseGenericList(html, baseUrl, limit) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const articles = doc.querySelectorAll('article.thumb.grid-item');
+  const movies = [];
+  for (const art of articles) {
+    if (movies.length >= limit) break;
+    const m = extractMovieFromCard(art, baseUrl, 0);
+    if (m) movies.push(m);
+  }
+  return movies;
+}
