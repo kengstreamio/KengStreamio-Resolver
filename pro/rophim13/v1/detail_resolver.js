@@ -1,1 +1,283 @@
-async function getMovieDetail(e){function t(e){return String(e??"").replace(/\s+/g," ").trim()}function r(e){if(!e)return null;const t=parseInt(String(e).replace(/^0+/,""),10);return isNaN(t)?null:t}try{console.log(`[KENG][rophim-13] getMovieDetail: ${e}`);const i=await fetch(e,(n=e,{headers:{"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",Accept:"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8","Accept-Language":"vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",Referer:n||"https://onflix.lol/"}}));if(!i.ok)throw new Error(`HTTP ${i.status}`);const o=function(e){const t=[],r=/self\.__next_f\.push\(\[1,"([\s\S]*?)"\]\)/g;let n;for(;null!==(n=r.exec(e));)try{t.push(n[1].replace(/\\"/g,'"').replace(/\\\\/g,"\\"))}catch(e){}return t}(await i.text());if(0===o.length)throw new Error("No RSC payload found");const s=function(e){for(const t of e)if(t.includes('"movie":{')&&t.includes('"episodes":['))return t;return null}(o);if(!s)throw new Error("No movie+episodes data in RSC payload");const l=function(e){const t='"movie":{',r=e.indexOf(t);if(-1===r)return null;const n=r+9-1;let i=0,o=!1,s=!1;for(let t=n;t<e.length;t++){const r=e[t];if(s)s=!1;else if("\\"!==r)if('"'!==r){if(!o&&("{"===r&&i++,"}"===r&&(i--,0===i)))return e.slice(n,t+1)}else o=!o;else s=!0}return null}(s);if(!l)throw new Error("Cannot extract movie object");const a=JSON.parse(l),c=function(e){const t='"episodes":[',r=e.indexOf(t);if(-1===r)return null;const n=r+12-1;let i=0,o=!1,s=!1;for(let t=n;t<e.length;t++){const r=e[t];if(s)s=!1;else if("\\"!==r)if('"'!==r){if(!o&&("["===r&&i++,"]"===r&&(i--,0===i)))return e.slice(n,t+1)}else o=!o;else s=!0}return null}(s);let u=[];c&&(u=JSON.parse(c));const p=function(e){const n=new Map;for(const i of e){const e=r(i.name||i.slug);if(null===e)continue;n.has(e)||n.set(e,{num:e,name:`Tập ${e}`,servers:[]});const o=n.get(e),s=t(i.server_name||"Vietsub #1"),l=i.link_m3u8||"",a=i.link_embed||"",c=l||a;c&&o.servers.push({server:s,url:c})}return Array.from(n.values()).sort((e,t)=>e.num-t.num).map((e,t)=>({episode_index:t,name:e.name,servers:e.servers}))}(u),f=[{name:"Phần 1",episodes:p}],m=Array.isArray(a.actors)?a.actors.map(e=>({name:t(e.name||e.original_name||""),avatar_url:t(e.image_url||"")})).filter(e=>e.name):[],g=Array.isArray(a.categories)?a.categories.map(e=>t(e.name||"")):[],d=Array.isArray(a.countries)&&a.countries.length>0?t(a.countries[0].name||""):"",h="phim-bo"===a.type?"series":"movie",_=a.slug||"",v={id:_,title:t(a.title||""),title_original:t(a.original_title||""),poster_url:t(a.poster_url||""),thumbnail_url:t(a.thumb_url||""),url:_?`https://onflix.lol/phim/${_}`:e,year:String(a.year||""),duration:t(a.time||""),rating:String(a.tmdb_vote_average||a.rated||""),country:d,genres:g,description:function(e){return String(e??"").replace(/<[^>]+>/g," ").replace(/&[a-z]+;/gi," ").replace(/\s+/g," ").trim()}(a.content||""),media_type:h,total_episodes:parseInt(a.total_episode||a.episode_total||"0",10)||0,badge_text:t(a.episode_status||a.episode_current||""),parts:f,actors:m},y=f.reduce((e,t)=>e+t.episodes.length,0);return console.log(`[KENG][rophim-13] getMovieDetail: ${v.title} (${v.media_type}) — ${f.length} part(s), ${y} episodes, ${m.length} actors`),JSON.stringify(v)}catch(e){return console.error(`[KENG][rophim-13] getMovieDetail ERROR: ${e.message}`),JSON.stringify({error:e.message})}var n}
+/**
+ * Detail Resolver v1 — onflix.lol (rophim-13)
+ * Contract: getMovieDetail(filmUrl) → JSON object with parts[] field (v6.1)
+ * Source: Next.js RSC payload embedded in detail page HTML
+ * Episodes: Directly in RSC payload with link_m3u8 + link_embed
+ */
+async function getMovieDetail(filmUrl) {
+  const _API = 'https://k8s.onflixcdn.com/api';
+  const _UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+
+  function _fetchOpts(referer) {
+    return {
+      headers: {
+        'User-Agent': _UA,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Referer': referer || 'https://onflix.lol/',
+      },
+    };
+  }
+
+  function _clean(v) {
+    return String(v ?? '').replace(/\s+/g, ' ').trim();
+  }
+
+  function _stripHtml(html) {
+    return String(html ?? '').replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/gi, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  function _parseEpNum(name) {
+    if (!name) return null;
+    const n = parseInt(String(name).replace(/^0+/, ''), 10);
+    return isNaN(n) ? null : n;
+  }
+
+  /**
+   * Extract RSC pushes from Next.js HTML
+   * Pattern: self.__next_f.push([1,"..."])
+   */
+  function _extractRscPushes(html) {
+    const pushes = [];
+    const re = /self\.__next_f\.push\(\[1,"([\s\S]*?)"\]\)/g;
+    let m;
+    while ((m = re.exec(html)) !== null) {
+      try {
+        pushes.push(m[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\'));
+      } catch (_) {
+        // skip malformed
+      }
+    }
+    return pushes;
+  }
+
+  /**
+   * Find the RSC push containing movie + episodes data
+   * It's the one with "movie":{...} and "episodes":[...]
+   */
+  function _findDataPush(pushes) {
+    for (const p of pushes) {
+      if (p.includes('"movie":{') && p.includes('"episodes":[')) {
+        return p;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Extract movie object from RSC push using brace-depth parsing
+   */
+  function _extractMovieObj(text) {
+    const key = '"movie":{';
+    const idx = text.indexOf(key);
+    if (idx === -1) return null;
+
+    const start = idx + key.length - 1; // position of opening {
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+      if (esc) { esc = false; continue; }
+      if (ch === '\\') { esc = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === '{') depth++;
+      if (ch === '}') {
+        depth--;
+        if (depth === 0) {
+          return text.slice(start, i + 1);
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Extract episodes array from RSC push using bracket-depth parsing
+   */
+  function _extractEpisodesArr(text) {
+    const key = '"episodes":[';
+    const idx = text.indexOf(key);
+    if (idx === -1) return null;
+
+    const start = idx + key.length - 1; // position of opening [
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+      if (esc) { esc = false; continue; }
+      if (ch === '\\') { esc = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === '[') depth++;
+      if (ch === ']') {
+        depth--;
+        if (depth === 0) {
+          return text.slice(start, i + 1);
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Group flat episodes by episode number → nested with servers[]
+   */
+  function _groupEpisodes(rawEps) {
+    const map = new Map(); // key = episode number
+    const _SKIP_SRCS = new Set([]); // NC: was blocked (DNS+CORS), now handled via embed type
+
+    for (const ep of rawEps) {
+      let num = _parseEpNum(ep.name || ep.slug);
+      let displayName = null; // null → use "Tập ${num}" default
+
+      // Cinema/phim-le movies have non-numeric names like "FULL"
+      if (num === null) {
+        const rawName = _clean(ep.name || ep.slug || '');
+        if (!rawName) continue; // truly empty — skip
+        num = 0; // default episode number for single-episode movies
+        displayName = rawName; // keep original name (e.g. "FULL")
+      }
+
+      // Skip NC server — ss.onflixstream.site DNS NXDOMAIN, embed cross-origin CORS blocked
+      if (_SKIP_SRCS.has(ep.src)) continue;
+
+      if (!map.has(num)) {
+        map.set(num, { num, name: displayName || `Tập ${num}`, servers: [] });
+      }
+
+      const entry = map.get(num);
+      const serverName = _clean(ep.server_name || 'Vietsub #1');
+      const m3u8 = ep.link_m3u8 || '';
+      const embed = ep.link_embed || '';
+
+      // Prefer m3u8, fallback embed
+      const url = m3u8 || embed;
+      if (url) {
+        entry.servers.push({ server: serverName, url });
+      }
+    }
+
+    // Sort servers: SN → OP → PA → NC
+    const _prio = (s) => {
+      if (s.includes('(SN)')) return 0;
+      if (s.includes('(OP)')) return 1;
+      if (s.includes('(PA)')) return 2;
+      if (s.includes('(NC)')) return 3;
+      return 99;
+    };
+    for (const [, entry] of map) {
+      entry.servers.sort((a, b) => _prio(a.server) - _prio(b.server));
+    }
+
+    return Array.from(map.values())
+      .sort((a, b) => a.num - b.num)
+      .map((ep, idx) => ({
+        episode_index: idx,
+        name: ep.name,
+        servers: ep.servers,
+      }));
+  }
+
+  try {
+    console.log(`[KENG][rophim-13] getMovieDetail: ${filmUrl}`);
+
+    // 1. Fetch detail page HTML
+    const resp = await fetch(filmUrl, _fetchOpts(filmUrl));
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+    const html = await resp.text();
+
+    // 2. Extract RSC pushes
+    const pushes = _extractRscPushes(html);
+    if (pushes.length === 0) {
+      throw new Error('No RSC payload found');
+    }
+
+    // 3. Find data push with movie + episodes
+    const dataPush = _findDataPush(pushes);
+    if (!dataPush) {
+      throw new Error('No movie+episodes data in RSC payload');
+    }
+
+    // 4. Extract movie object
+    const movieStr = _extractMovieObj(dataPush);
+    if (!movieStr) {
+      throw new Error('Cannot extract movie object');
+    }
+    const movie = JSON.parse(movieStr);
+
+    // 5. Extract episodes array
+    const epsStr = _extractEpisodesArr(dataPush);
+    let rawEps = [];
+    if (epsStr) {
+      rawEps = JSON.parse(epsStr);
+    }
+
+    // 6. Group episodes
+    const episodes = _groupEpisodes(rawEps);
+
+    // 7. Build parts (single part — onflix has no multi-season)
+    const parts = [{
+      name: 'Phần 1',
+      episodes,
+    }];
+
+    // 8. Build actors
+    const actors = Array.isArray(movie.actors)
+      ? movie.actors.map(a => ({
+          name: _clean(a.name || a.original_name || ''),
+          avatar_url: _clean(a.image_url || ''),
+        })).filter(a => a.name)
+      : [];
+
+    // 9. Build genres
+    const genres = Array.isArray(movie.categories)
+      ? movie.categories.map(c => _clean(c.name || ''))
+      : [];
+
+    // 10. Build country
+    const country = Array.isArray(movie.countries) && movie.countries.length > 0
+      ? _clean(movie.countries[0].name || '')
+      : '';
+
+    // 11. media_type mapping
+    const mediaType = movie.type === 'phim-bo' ? 'series' : 'movie';
+
+    // 12. Build detail
+    const slug = movie.slug || '';
+    const detail = {
+      id: slug,
+      title: _clean(movie.title || ''),
+      title_original: _clean(movie.original_title || ''),
+      poster_url: _clean(movie.poster_url || ''),
+      thumbnail_url: _clean(movie.thumb_url || ''),
+      url: slug ? `https://onflix.lol/phim/${slug}` : filmUrl,
+      year: String(movie.year || ''),
+      duration: _clean(movie.time || ''),
+      rating: String(movie.tmdb_vote_average || movie.rated || ''),
+      country,
+      genres,
+      description: _stripHtml(movie.content || ''),
+      media_type: mediaType,
+      total_episodes: parseInt(movie.total_episode || movie.episode_total || '0', 10) || 0,
+      badge_text: _clean(movie.episode_status || movie.episode_current || ''),
+      parts,
+      actors,
+    };
+
+    const totalEps = parts.reduce((s, p) => s + p.episodes.length, 0);
+    console.log(`[KENG][rophim-13] getMovieDetail: ${detail.title} (${detail.media_type}) — ${parts.length} part(s), ${totalEps} episodes, ${actors.length} actors`);
+
+    return JSON.stringify(detail);
+
+  } catch (e) {
+    console.error(`[KENG][rophim-13] getMovieDetail ERROR: ${e.message}`);
+    return JSON.stringify({ error: e.message });
+  }
+}
