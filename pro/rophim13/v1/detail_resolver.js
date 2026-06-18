@@ -52,14 +52,31 @@ async function getMovieDetail(filmUrl) {
   }
 
   /**
-   * Find the RSC push containing movie + episodes data
-   * It's the one with "movie":{...} and "episodes":[...]
+   * Find RSC push(es) containing movie + episodes data
+   * They may be in the same push (old format) or separate pushes (new format).
+   * Returns { moviePush, episodesPush } where episodesPush may be null.
    */
   function _findDataPush(pushes) {
+    let moviePush = null;
+    let episodesPush = null;
+
     for (const p of pushes) {
-      if (p.includes('"movie":{') && p.includes('"episodes":[')) {
-        return p;
+      // Look for movie data
+      if (p.includes('"movie":{')) {
+        if (p.includes('"episodes":[')) {
+          // Combined format — both in one push
+          return { moviePush: p, episodesPush: p };
+        }
+        moviePush = p;
       }
+      // Look for episodes data (may be in a different push)
+      if (p.includes('"episodes":[')) {
+        episodesPush = p;
+      }
+    }
+
+    if (moviePush) {
+      return { moviePush, episodesPush };
     }
     return null;
   }
@@ -199,24 +216,26 @@ async function getMovieDetail(filmUrl) {
       throw new Error('No RSC payload found');
     }
 
-    // 3. Find data push with movie + episodes
+    // 3. Find data push(es) with movie + episodes
     const dataPush = _findDataPush(pushes);
     if (!dataPush) {
       throw new Error('No movie+episodes data in RSC payload');
     }
 
     // 4. Extract movie object
-    const movieStr = _extractMovieObj(dataPush);
+    const movieStr = _extractMovieObj(dataPush.moviePush);
     if (!movieStr) {
       throw new Error('Cannot extract movie object');
     }
     const movie = JSON.parse(movieStr);
 
-    // 5. Extract episodes array
-    const epsStr = _extractEpisodesArr(dataPush);
+    // 5. Extract episodes array (may be in a separate push, or empty)
     let rawEps = [];
-    if (epsStr) {
-      rawEps = JSON.parse(epsStr);
+    if (dataPush.episodesPush) {
+      const epsStr = _extractEpisodesArr(dataPush.episodesPush);
+      if (epsStr) {
+        rawEps = JSON.parse(epsStr);
+      }
     }
 
     // 6. Group episodes
