@@ -216,7 +216,7 @@ async function getAll_de_xuat_cho_ban(page = 1) {
   if (!res.ok) return JSON.stringify([]);
   const data = await res.json();
   const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
-  return JSON.stringify(movies.filter(m => m && m.title && m.url));
+  return JSON.stringify(movies.filter(m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
 }
 
 async function getAll_dang_chieu_phat(page = 1) {
@@ -224,7 +224,7 @@ async function getAll_dang_chieu_phat(page = 1) {
   if (!res.ok) return JSON.stringify([]);
   const data = await res.json();
   const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
-  return JSON.stringify(movies.filter(m => m && m.title && m.url));
+  return JSON.stringify(movies.filter(m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
 }
 
 async function getAll_phim_chat_luong_cao_va_phu_de_song_ngu(page = 1) {
@@ -232,7 +232,7 @@ async function getAll_phim_chat_luong_cao_va_phu_de_song_ngu(page = 1) {
   if (!res.ok) return JSON.stringify([]);
   const data = await res.json();
   const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
-  return JSON.stringify(movies.filter(m => m && m.title && m.url));
+  return JSON.stringify(movies.filter(m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
 }
 
 async function getAll_hoat_hinh_chon_loc(page = 1) {
@@ -240,7 +240,7 @@ async function getAll_hoat_hinh_chon_loc(page = 1) {
   if (!res.ok) return JSON.stringify([]);
   const data = await res.json();
   const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
-  return JSON.stringify(movies.filter(m => m && m.title && m.url));
+  return JSON.stringify(movies.filter(m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
 }
 
 async function getAll_phieu_luu_mao_hiem(page = 1) {
@@ -248,7 +248,7 @@ async function getAll_phieu_luu_mao_hiem(page = 1) {
   if (!res.ok) return JSON.stringify([]);
   const data = await res.json();
   const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
-  return JSON.stringify(movies.filter(m => m && m.title && m.url));
+  return JSON.stringify(movies.filter(m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
 }
 
 async function getAll_phim_truyen_hinh_trung_quoc_dai_luc(page = 1) {
@@ -256,7 +256,7 @@ async function getAll_phim_truyen_hinh_trung_quoc_dai_luc(page = 1) {
   if (!res.ok) return JSON.stringify([]);
   const data = await res.json();
   const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
-  return JSON.stringify(movies.filter(m => m && m.title && m.url));
+  return JSON.stringify(movies.filter(m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
 }
 
 async function getAll_tinh_yeu_la_nhung_gi_trai_tim_muon(page = 1) {
@@ -264,7 +264,7 @@ async function getAll_tinh_yeu_la_nhung_gi_trai_tim_muon(page = 1) {
   if (!res.ok) return JSON.stringify([]);
   const data = await res.json();
   const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
-  return JSON.stringify(movies.filter(m => m && m.title && m.url));
+  return JSON.stringify(movies.filter(m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
 }
 
 async function getAll_co_trang_huyen_ao(page = 1) {
@@ -272,7 +272,7 @@ async function getAll_co_trang_huyen_ao(page = 1) {
   if (!res.ok) return JSON.stringify([]);
   const data = await res.json();
   const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
-  return JSON.stringify(movies.filter(m => m && m.title && m.url));
+  return JSON.stringify(movies.filter(m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
 }
 
 async function getAll_phim_han_quoc(page = 1) {
@@ -280,7 +280,7 @@ async function getAll_phim_han_quoc(page = 1) {
   if (!res.ok) return JSON.stringify([]);
   const data = await res.json();
   const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
-  return JSON.stringify(movies.filter(m => m && m.title && m.url));
+  return JSON.stringify(movies.filter(m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
 }
 
 async function getAll_thanh_xuan(page = 1) {
@@ -288,7 +288,7 @@ async function getAll_thanh_xuan(page = 1) {
   if (!res.ok) return JSON.stringify([]);
   const data = await res.json();
   const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
-  return JSON.stringify(movies.filter(m => m && m.title && m.url));
+  return JSON.stringify(movies.filter(m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
 }
 
 async function getAll_phim_chua_lanh_tam_hon(page = 1) {
@@ -296,7 +296,7 @@ async function getAll_phim_chua_lanh_tam_hon(page = 1) {
   if (!res.ok) return JSON.stringify([]);
   const data = await res.json();
   const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
-  return JSON.stringify(movies.filter(m => m && m.title && m.url));
+  return JSON.stringify(movies.filter(m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
 }
 
 async function getAll_phim_chuyen_the_tu_tac_pham_van_hoc(page = 1) {
@@ -304,7 +304,7 @@ async function getAll_phim_chuyen_the_tu_tac_pham_van_hoc(page = 1) {
   if (!res.ok) return JSON.stringify([]);
   const data = await res.json();
   const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
-  return JSON.stringify(movies.filter(m => m && m.title && m.url));
+  return JSON.stringify(movies.filter(m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
 }
 
 async function getAll_phim_4k(page = 1) {
@@ -312,7 +312,7 @@ async function getAll_phim_4k(page = 1) {
   if (!res.ok) return JSON.stringify([]);
   const data = await res.json();
   const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
-  return JSON.stringify(movies.filter(m => m && m.title && m.url));
+  return JSON.stringify(movies.filter(m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
 }
 
 async function getAll_phim_cong_so(page = 1) {
@@ -320,7 +320,7 @@ async function getAll_phim_cong_so(page = 1) {
   if (!res.ok) return JSON.stringify([]);
   const data = await res.json();
   const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
-  return JSON.stringify(movies.filter(m => m && m.title && m.url));
+  return JSON.stringify(movies.filter(m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
 }
 
 async function getAll_hinh_su_toi_pham_han_quoc(page = 1) {
@@ -328,7 +328,7 @@ async function getAll_hinh_su_toi_pham_han_quoc(page = 1) {
   if (!res.ok) return JSON.stringify([]);
   const data = await res.json();
   const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
-  return JSON.stringify(movies.filter(m => m && m.title && m.url));
+  return JSON.stringify(movies.filter(m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
 }
 
 async function getAll_phim_co_trang_huyen_huyen_khong_the_bo_lo(page = 1) {
@@ -336,7 +336,7 @@ async function getAll_phim_co_trang_huyen_huyen_khong_the_bo_lo(page = 1) {
   if (!res.ok) return JSON.stringify([]);
   const data = await res.json();
   const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
-  return JSON.stringify(movies.filter(m => m && m.title && m.url));
+  return JSON.stringify(movies.filter(m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
 }
 
 async function getAll_dien_anh_au_my(page = 1) {
@@ -344,7 +344,7 @@ async function getAll_dien_anh_au_my(page = 1) {
   if (!res.ok) return JSON.stringify([]);
   const data = await res.json();
   const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
-  return JSON.stringify(movies.filter(m => m && m.title && m.url));
+  return JSON.stringify(movies.filter(m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
 }
 
 async function getAll_chieu_rap(baseUrl = 'https://onflix.lol', page = 1) {
@@ -360,7 +360,7 @@ async function getAll_chieu_rap(baseUrl = 'https://onflix.lol', page = 1) {
     const raw = data.data || [];
     console.log(`[KENG][rophim-13] getAll_chieu_rap raw=${raw.length}`);
     const movies = raw.map(m => _rophim13TransformMovie(m, baseUrl));
-    const filtered = movies.filter(m => m && m.title && m.url);
+    const filtered = movies.filter(m => m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
     console.log(`[KENG][rophim-13] getAll_chieu_rap filtered=${filtered.length}`);
     return JSON.stringify(filtered);
   } catch (e) {
