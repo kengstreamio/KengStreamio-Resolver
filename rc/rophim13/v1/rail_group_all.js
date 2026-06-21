@@ -116,7 +116,10 @@ async function railGroupAll(baseUrl) {
           unique.push(m);
         }
       }
-      return unique.map(m => _rophim13TransformMovie(m, baseUrl)).filter(m => m.title && m.url);
+      return unique
+        .map(m => _rophim13TransformMovie(m, baseUrl))
+        .filter(m => m.title && m.url)
+        .sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
     } catch (e) {
       console.log(`[KENG][rophim-13] Error fetching cinema: ${e.message}`);
       return [];
