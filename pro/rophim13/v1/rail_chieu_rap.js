@@ -1,1 +1,106 @@
-const _CR_API="https://k8s.onflixcdn.com/api",_CR_UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";function _crFetchOpts(e){return{headers:{"User-Agent":_CR_UA,Accept:"application/json, text/plain, */*","Accept-Language":"vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",Referer:e||"https://onflix.lol/",Origin:"https://onflix.lol"}}}function _crTransformMovie(e,t){let i="";const r=e.vietsub||0,o=e.thuyet_minh||0;r>0&&o>0?i=`P.Đ ${r} | T.M ${o}`:r>0?i=`P.Đ ${r}`:o>0&&(i=`T.M ${o}`);const s="phim-bo"===e.type?"series":"movie",a=e.categories?e.categories.split(", ").map(e=>e.trim()).filter(Boolean):[];return{rank:0,title:e.title||"",title_original:e.original_title||"",poster_url:e.thumb_url||e.poster_url||"",url:e.slug?`${t}/phim/${e.slug}`:"",media_type:s,badge_text:e.quality||"",badge_sub:i,year:e.year?String(e.year):"",rating:e.tmdb_vote_average?String(e.tmdb_vote_average):"",synopsis:"",age_rating:e.rated||"",episode_current:e.episode_current||"",genres:a}}async function railChieuRap(e){console.log("[KENG][rophim-13] railChieuRap() v1");try{const t=`${_CR_API}/movies?type=chieu_rap&sort=newest&page=1&limit=12`,i=await fetch(t,_crFetchOpts(e+"/"));if(!i.ok)throw new Error("Movies API returned "+i.status);const r=(await i.json()).data||[],o=new Set,s=[];for(const t of r)t.slug&&!o.has(t.slug)&&(o.add(t.slug),s.push(_crTransformMovie(t,e)));const a=s.filter(e=>e.title&&e.url);return console.log(`[KENG][rophim-13] railChieuRap() done — ${a.length} movies`),JSON.stringify({rails:[{id:"chieu_rap",title:"Phim Chiếu Rạp",subtitle:null,card_height_percent:.22,card_size_ratio:.667,is_hero_source:!1,show_rank:!1,movies:a,show_cta:{js_method:"getAllChieuRap"}}]})}catch(e){return console.log(`[KENG][rophim-13] railChieuRap() error: ${e.message}`),JSON.stringify({rails:[]})}}async function getAllChieuRap(e=1){const t=`${_CR_API}/movies?type=chieu_rap&sort=newest&page=${e}&limit=12`,i=await fetch(t,_crFetchOpts());if(!i.ok)return JSON.stringify([]);const r=((await i.json()).data||[]).map(e=>_crTransformMovie(e,"https://onflix.lol"));return JSON.stringify(r.filter(e=>e.title&&e.url))}
+// Provider: rophim-13 | Site: https://onflix.lol
+// Contract: railChieuRap(baseUrl) -> JSON { rails: [...] }
+// API: https://k8s.onflixcdn.com/api/movies?type=chieu_rap&sort=newest&page=1&limit=12
+// v6.1 rail-group contract — standalone CTA rail
+
+// ===== SHARED CONSTANTS (file scope) =====
+const _CR_API = 'https://k8s.onflixcdn.com/api';
+const _CR_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+
+function _crFetchOpts(referer) {
+  return {
+    headers: {
+      'User-Agent': _CR_UA,
+      'Accept': 'application/json, text/plain, */*',
+      'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Referer': referer || 'https://onflix.lol/',
+      'Origin': 'https://onflix.lol',
+    },
+  };
+}
+
+function _crTransformMovie(m, siteBase) {
+  let badgeSub = '';
+  const vs = m.vietsub || 0;
+  const tm = m.thuyet_minh || 0;
+  if (vs > 0 && tm > 0) {
+    badgeSub = `P.Đ ${vs} | T.M ${tm}`;
+  } else if (vs > 0) {
+    badgeSub = `P.Đ ${vs}`;
+  } else if (tm > 0) {
+    badgeSub = `T.M ${tm}`;
+  }
+  const mediaType = m.type === 'phim-bo' ? 'series' : 'movie';
+  const genres = m.categories
+    ? m.categories.split(', ').map(g => g.trim()).filter(Boolean)
+    : [];
+  return {
+    rank: 0,
+    title: m.title || '',
+    title_original: m.original_title || '',
+    poster_url: m.thumb_url || m.poster_url || '',
+    url: m.slug ? `${siteBase}/phim/${m.slug}` : '',
+    media_type: mediaType,
+    badge_text: m.quality || '',
+    badge_sub: badgeSub,
+    year: m.year ? String(m.year) : '',
+    rating: m.tmdb_vote_average ? String(m.tmdb_vote_average) : '',
+    synopsis: '',
+    age_rating: m.rated || '',
+    episode_current: m.episode_current || '',
+    genres: genres,
+  };
+}
+
+async function railChieuRap(baseUrl) {
+  console.log('[KENG][rophim-13] railChieuRap() v1');
+
+  try {
+    const apiUrl = `${_CR_API}/movies?type=chieu_rap&sort=newest&page=1&limit=12`;
+    const res = await fetch(apiUrl, _crFetchOpts(baseUrl + '/'));
+    if (!res.ok) throw new Error('Movies API returned ' + res.status);
+    const data = await res.json();
+    const rawMovies = data.data || [];
+
+    const seen = new Set();
+    const movies = [];
+    for (const m of rawMovies) {
+      if (m.slug && !seen.has(m.slug)) {
+        seen.add(m.slug);
+        movies.push(_crTransformMovie(m, baseUrl));
+      }
+    }
+
+    const validMovies = movies
+      .filter(m => m.title && m.url)
+      .sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
+    console.log(`[KENG][rophim-13] railChieuRap() done — ${validMovies.length} movies`);
+
+    return JSON.stringify({
+      rails: [{
+        id: 'chieu_rap',
+        title: 'Phim Chiếu Rạp',
+        subtitle: null,
+        card_height_percent: 0.22,
+        card_size_ratio: 0.667,
+        is_hero_source: false,
+        show_rank: false,
+        movies: validMovies,
+        show_cta: { js_method: 'getAllChieuRap' },
+      }],
+    });
+  } catch (e) {
+    console.log(`[KENG][rophim-13] railChieuRap() error: ${e.message}`);
+    return JSON.stringify({ rails: [] });
+  }
+}
+
+// ===== CTA FUNCTION =====
+async function getAllChieuRap(page = 1) {
+  const url = `${_CR_API}/movies?type=chieu_rap&sort=newest&page=${page}&limit=12`;
+  const res = await fetch(url, _crFetchOpts());
+  if (!res.ok) return JSON.stringify([]);
+  const data = await res.json();
+  const movies = (data.data || []).map(m => _crTransformMovie(m, 'https://onflix.lol'));
+  return JSON.stringify(movies.filter(m => m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
+}
