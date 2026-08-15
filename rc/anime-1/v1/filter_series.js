@@ -9,15 +9,23 @@
 // Parse HLS variant playlist for SSAI ad segments.
 // Detects ad patterns in HLS segment URLs:
 //   - /adjump/ URLs
-//   - convertvN/ prefix segments (convertv7/, convertv8/, convertv9/, ...)
 //   - /vN/ prefix with segment_XXX.ts (numbered SSAI ad segments, any version)
 //
 // NOTE: every clause must evaluate to a boolean. Never compare a .test() result
 // against -1 — `-1 !== false` is true, which classifies every segment as an ad
 // and makes the whole movie look like one giant ad break.
+//
+// `convertvN/` was removed 2026-08-15: it is a FALSE POSITIVE. On
+// s5.phim1280.tv those segments carry the same random 8-char names as the
+// content around them, sit in a playlist with zero /adjump/ segments, and were
+// confirmed on-device to be ordinary film — they are re-transcoded segments,
+// and the #EXT-X-DISCONTINUITY around them marks an encoder change, not an ad
+// break. Flagging them cut ~25s of real movie out of a single title.
+//
+// Bias: a false positive removes film the user paid attention to; a false
+// negative merely shows an ad. Prefer missing an ad over cutting content.
 function _isAdSegment(segment) {
   return segment.indexOf('/adjump/') !== -1
-      || /convertv\d+\//.test(segment)
       || /^\/v\d+\/.*segment_/.test(segment);
 }
 
