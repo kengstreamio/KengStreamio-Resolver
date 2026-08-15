@@ -1,1 +1,685 @@
-function _isAdSegment(e){return-1!==e.indexOf("/adjump/")||/convertv\d+\//.test(e)||/^\/v\d+\/.*segment_/.test(e)}function parseAdsFromPlaylist(e){for(var t=[],i=e.split("\n"),r=0,n=null,o=0;o<i.length;o++){var a=i[o].trim();if(0===a.indexOf("#EXTINF:")){var s=a.match(/#EXTINF:([\d.]+)/);if(s){var l=parseFloat(s[1]);if(!isNaN(l))_isAdSegment((i[o+1]||"").trim())?null===n&&(n=r):null!==n&&(t.push({start:Math.round(100*n)/100,end:Math.round(100*r)/100,duration:Math.round(100*(r-n))/100}),n=null),r+=l}}}return null!==n&&t.push({start:Math.round(100*n)/100,end:Math.round(100*r)/100,duration:Math.round(100*(r-n))/100}),t}function shouldDetectAdsOnServer(e){return-1!==e.indexOf("kkphimplayer")||-1!==e.indexOf("phim1280.tv")}async function resolveAdsVariant(e,t){var i,r="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";try{i=new URL(e).origin}catch(e){i=""}var n={headers:{"User-Agent":r,Accept:"*/*","Accept-Language":"vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",Referer:t||i+"/",Origin:i||""}};try{var o=await fetch(e,n);if(!o.ok)return null;for(var a=(await o.text()).split("\n"),s="",l=0;l<a.length;l++){var c=a[l].trim();if(c&&"#"!==c.charAt(0)){s=c;break}}if(!s)return null;var u=s;if("h"!==s.charAt(0))u=e.substring(0,e.lastIndexOf("/")+1)+s;var m=null;try{var h=new AbortController,g=setTimeout(function(){h.abort()},2e3),p=await fetch(u,{headers:n.headers,signal:h.signal});if(clearTimeout(g),p.ok){var d=parseAdsFromPlaylist(await p.text());d.length>0&&(m=d,console.log("[KENG][common] Ads detected: "+JSON.stringify(m)))}}catch(e){}return console.log("[KENG][common] PA resolved: "+u+" | ads="+(null===m?"null":m.length)),{type:"m3u8",url:u,headers:{Referer:t,"User-Agent":r},ads:m}}catch(e){return null}}async function makeStreamM3U8Result(e,t){if(shouldDetectAdsOnServer(e)){console.log("[KENG][common] PA CDN detected, resolving variant: "+e);var i=await resolveAdsVariant(e,t);if(i)return i;console.log("[KENG][common] PA resolve failed, fallback to original URL")}return{type:"m3u8",url:e,headers:{Referer:t,"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"}}}async function railGroupAll(e){const t=e,i=e+"/baseapi/api/v1";function r(e){const t=(e.status||"").toLowerCase(),i=(e.episode_current||"").toLowerCase(),r=(e.name||"").toLowerCase(),n=(e.slug||"").toLowerCase();return"trailer"===t||"trailer"===i||r.includes("trailer")||n.includes(".trailer")}function n(e){const i=e.episode_current||e.quality||"";return{rank:0,title:e.name||"",title_original:e.origin_name||"",poster_url:e.poster||e.thumbnail||"",thumbnail_url:e.thumbnail||"",url:e.slug?`${t}/phim/${e.slug}`:"",media_type:"series"===e.type?"series":"movie",badge_text:i,badge_sub:"",year:String(e.publish_year||""),rating:String(e.imdb_rating||""),synopsis:"",age_rating:"",episode_current:e.episode_current||"",genres:[]}}console.log("[KENG][RoPhim12] railGroupAll() v6 — API-based");const o=[],a=[];try{try{console.log("[KENG][RoPhim12] Fetching rails from Homepage Lists API...");const e=i+"/lists/homepageLists?page=1&limit=10",a=await fetch(e,(s=t+"/",{headers:{"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",Accept:"application/json, text/plain, */*","Accept-Language":"vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7","Cache-Control":"no-cache",Pragma:"no-cache",Referer:s||t+"/",Origin:t}})).then(e=>{if(!e.ok)throw new Error("Homepage Lists API returned "+e.status);return e.json()});if(a&&a.result&&a.result.collections&&Array.isArray(a.result.collections)){const e=[],t={"phim-sap-toi":{id:"phim_hot",is_hero_source:!0,limit:20},"phim-dien-anh-moi-coong":{id:"cinema",limit:16},"top-10-phim-bo-hom-nay":{id:"top10_series",show_rank:!0,limit:10},"man-nhan-voi-phim-chieu-rap":{id:"cinema_featured",limit:12},"phim-han-quoc-moi":{id:"korean",limit:12},"phim-trung-quoc-moi":{id:"chinese",limit:12},"au-my":{id:"usuk",limit:12},"kho-tang-anime-moi-nhat":{id:"anime",limit:12},"dien-anh-hong-kong-o-cho-nay-nay":{id:"hongkong",limit:12}},i={korean:{js_method:"getAllKorean"},chinese:{js_method:"getAllChinese"},usuk:{js_method:"getAllUsuk"},cinema:{js_method:"getAllCinema"},cinema_featured:{js_method:"getAllCinemaFeatured"},phim_hot:{js_method:"getAllPhimHot"},anime:{js_method:"getAllAnime"},hongkong:{js_method:"getAllHongKong"}};for(const o of a.result.collections){const a=t[o.slug||""];if(a&&o.movies&&Array.isArray(o.movies)){const t=o.movies.filter(e=>!r(e.movie?e.movie:e)).slice(0,a.limit).map((e,t)=>{const i=n(e.movie?e.movie:e);return a.show_rank&&(i.rank=t+1),i});if(t.length>0){const r=a.id,n=i[r]?{js_method:i[r].js_method}:null;e.push({id:r,title:o.name||r,subtitle:null,card_height_percent:.18,card_size_ratio:1.5,is_hero_source:a.is_hero_source||!1,show_rank:a.show_rank||!1,movies:t,show_cta:n}),console.log("[KENG][RoPhim12] API rail: "+r+" ("+t.length+" movies) cta="+(n?n.js_method:"null"))}}}e.length>0&&(o.push(...e),console.log("[KENG][RoPhim12] Loaded "+e.length+" rails from Homepage Lists API"))}}catch(e){a.push("Homepage Lists API error: "+e.message)}if(0===o.length)return console.warn("[KENG][RoPhim12] No rails found"),a.forEach(e=>console.warn("[KENG][RoPhim12] "+e)),JSON.stringify({error:"Could not fetch any rails. Errors: "+a.join("; ")});const e=o.map(e=>({id:e.id||"unknown",title:e.title||"Untitled Rail",subtitle:e.subtitle||null,card_height_percent:e.card_height_percent||.18,card_size_ratio:e.card_size_ratio||.667,is_hero_source:e.is_hero_source||!1,show_rank:e.show_rank||!1,movies:Array.isArray(e.movies)?e.movies:[],show_cta:e.show_cta||null}));return console.log("[KENG][RoPhim12] Returning "+e.length+" rails"),JSON.stringify(e)}catch(e){return console.error("[KENG][RoPhim12] railGroupAll() FATAL: "+e.message),JSON.stringify({error:"Fatal error: "+e.message})}var s}async function _fetchCtaMovies(e,t,i){const r=e;try{const e=await fetch(t,(n=r+"/",{headers:{"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",Accept:"application/json, text/plain, */*","Accept-Language":"vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7","Cache-Control":"no-cache",Pragma:"no-cache",Referer:n||r+"/",Origin:r}}));if(!e.ok)return console.warn("[KENG][RoPhim12] "+i+" HTTP "+e.status),JSON.stringify([]);const o=(await e.json()).result||[];if(!Array.isArray(o)||0===o.length)return JSON.stringify([]);const a=o.filter(e=>!function(e){const t=(e.status||"").toLowerCase(),i=(e.episode_current||"").toLowerCase(),r=(e.name||"").toLowerCase(),n=(e.slug||"").toLowerCase();return"trailer"===t||"trailer"===i||r.includes("trailer")||n.includes(".trailer")}(e.movie?e.movie:e)).map(function(e){const t=e.episode_current||e.quality||"";return{rank:0,title:e.name||"",title_original:e.origin_name||"",poster_url:e.thumbnail||e.poster||"",thumbnail_url:e.thumbnail||"",url:e.slug?r+"/phim/"+e.slug:"",media_type:"series"===e.type?"series":"movie",badge_text:t,badge_sub:"",year:String(e.publish_year||""),rating:String(e.imdb_rating||""),synopsis:"",age_rating:"",episode_current:e.episode_current||"",genres:[]}}).filter(e=>e.title&&e.url);return console.log("[KENG][RoPhim12] "+i+" page movies: "+a.length),JSON.stringify(a)}catch(e){return console.error("[KENG][RoPhim12] "+i+" error: "+e.message),JSON.stringify([])}var n}async function getAllKorean(e,t){const i=t||1;return _fetchCtaMovies(e,e+"/baseapi/api/v1/movies/by-region/han-quoc?page="+i,"getAllKorean p="+i)}async function getAllChinese(e,t){const i=t||1;return _fetchCtaMovies(e,e+"/baseapi/api/v1/movies/by-region/trung-quoc?page="+i,"getAllChinese p="+i)}async function getAllUsuk(e,t){const i=t||1;return _fetchCtaMovies(e,e+"/baseapi/api/v1/movies/by-region/au-my?page="+i,"getAllUsuk p="+i)}async function getAllCinema(e,t){const i=t||1;return _fetchCtaMovies(e,e+"/baseapi/api/v1/movies/by-category/chieu-rap?page="+i,"getAllCinema p="+i)}async function _fetchCtaFromList(e,t,i,r){const n=e,o=e+"/baseapi/api/v1";try{const e=o+"/lists/homepageLists?page=1&limit=15",s=await fetch(e,(a=n+"/",{headers:{"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",Accept:"application/json, text/plain, */*","Accept-Language":"vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7","Cache-Control":"no-cache",Pragma:"no-cache",Referer:a||n+"/",Origin:n}}));if(!s.ok)return console.warn("[KENG][RoPhim12] "+r+" HTTP "+s.status),JSON.stringify([]);const l=await s.json(),c=(l?.result?.collections||[]).find(e=>e.slug===t);if(!c||!c.movies||!Array.isArray(c.movies))return console.warn("[KENG][RoPhim12] "+r+" collection not found or empty"),JSON.stringify([]);const u=12,m=i||1,h=(m-1)*u,g=h+u,p=c.movies.slice(h,g).filter(e=>!function(e){const t=(e.status||"").toLowerCase(),i=(e.episode_current||"").toLowerCase(),r=(e.name||"").toLowerCase(),n=(e.slug||"").toLowerCase();return"trailer"===t||"trailer"===i||r.includes("trailer")||n.includes(".trailer")}(e.movie?e.movie:e)),d=p.map(function(e){const t=e.episode_current||e.quality||"";return{rank:0,title:e.name||"",title_original:e.origin_name||"",poster_url:e.thumbnail||e.poster||"",thumbnail_url:e.thumbnail||"",url:e.slug?n+"/phim/"+e.slug:"",media_type:"series"===e.type?"series":"movie",badge_text:t,badge_sub:"",year:String(e.publish_year||""),rating:String(e.imdb_rating||""),synopsis:"",age_rating:"",episode_current:e.episode_current||"",genres:[]}}).filter(e=>e.title&&e.url);return console.log("[KENG][RoPhim12] "+r+" page "+m+": "+d.length+" movies"),JSON.stringify(d)}catch(e){return console.error("[KENG][RoPhim12] "+r+" error: "+e.message),JSON.stringify([])}var a}async function getAllCinemaFeatured(e,t){return _fetchCtaFromList(e,"man-nhan-voi-phim-chieu-rap",t,"getAllCinemaFeatured")}async function getAllPhimHot(e,t){return _fetchCtaFromList(e,"phim-sap-toi",t,"getAllPhimHot")}async function getAllAnime(e,t){return _fetchCtaFromList(e,"kho-tang-anime-moi-nhat",t,"getAllAnime")}async function getAllHongKong(e,t){return _fetchCtaFromList(e,"dien-anh-hong-kong-o-cho-nay-nay",t,"getAllHongKong")}
+/**
+ * Keng Common JS — shared utilities injected before each provider's resolver.
+ * Keep this file self-contained; it will be prepended to provider JS at deploy time.
+ *
+ * Contract: all functions are available in provider resolvers via normal JS scoping.
+ */
+
+// ── HLS Ad Detection ────────────────────────────────────────────────────────
+// Parse HLS variant playlist for SSAI ad segments.
+// Detects ad patterns in HLS segment URLs:
+//   - /adjump/ URLs
+//   - /vN/ prefix with segment_XXX.ts (numbered SSAI ad segments, any version)
+//
+// NOTE: every clause must evaluate to a boolean. Never compare a .test() result
+// against -1 — `-1 !== false` is true, which classifies every segment as an ad
+// and makes the whole movie look like one giant ad break.
+//
+// `convertvN/` was removed 2026-08-15: it is a FALSE POSITIVE. On
+// s5.phim1280.tv those segments carry the same random 8-char names as the
+// content around them, sit in a playlist with zero /adjump/ segments, and were
+// confirmed on-device to be ordinary film — they are re-transcoded segments,
+// and the #EXT-X-DISCONTINUITY around them marks an encoder change, not an ad
+// break. Flagging them cut ~25s of real movie out of a single title.
+//
+// Bias: a false positive removes film the user paid attention to; a false
+// negative merely shows an ad. Prefer missing an ad over cutting content.
+function _isAdSegment(segment) {
+  return segment.indexOf('/adjump/') !== -1
+      || /^\/v\d+\/.*segment_/.test(segment);
+}
+
+function parseAdsFromPlaylist(playlistText) {
+  var ads = [];
+  var lines = playlistText.split('\n');
+  var cumulative = 0.0;
+  var adStart = null;
+
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (line.indexOf('#EXTINF:') !== 0) continue;
+
+    var match = line.match(/#EXTINF:([\d.]+)/);
+    if (!match) continue;
+    var duration = parseFloat(match[1]);
+    if (isNaN(duration)) continue;
+
+    var segment = (lines[i + 1] || '').trim();
+
+    if (_isAdSegment(segment)) {
+      if (adStart === null) adStart = cumulative;
+    } else {
+      if (adStart !== null) {
+        ads.push({
+          start: Math.round(adStart * 100) / 100,
+          end: Math.round(cumulative * 100) / 100,
+          duration: Math.round((cumulative - adStart) * 100) / 100,
+        });
+        adStart = null;
+      }
+    }
+    cumulative += duration;
+  }
+
+  if (adStart !== null) {
+    ads.push({
+      start: Math.round(adStart * 100) / 100,
+      end: Math.round(cumulative * 100) / 100,
+      duration: Math.round((cumulative - adStart) * 100) / 100,
+    });
+  }
+
+  return ads;
+}
+
+// Total playable duration of a playlist, in seconds.
+function _playlistTotalDuration(playlistText) {
+  var lines = playlistText.split('\n');
+  var total = 0.0;
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (line.indexOf('#EXTINF:') !== 0) continue;
+    var match = line.match(/#EXTINF:([\d.]+)/);
+    if (!match) continue;
+    var d = parseFloat(match[1]);
+    if (!isNaN(d)) total += d;
+  }
+  return Math.round(total * 100) / 100;
+}
+
+// Sanity-checked ad detection.
+// Returns an array of ad zones, or null when the result looks bogus — a
+// mis-classifying detector would otherwise report the entire movie as one ad
+// zone and the player would seek straight to the end.
+//
+// null means "detection not trustworthy" and is distinct from [] ("no ads"),
+// which the Dart side relies on (see StreamResult.ads).
+function detectAdsSafe(playlistText) {
+  var total = _playlistTotalDuration(playlistText);
+  if (total <= 0) return null;
+
+  var ads = parseAdsFromPlaylist(playlistText);
+  if (ads.length === 0) return [];
+
+  var adTotal = 0.0;
+  for (var i = 0; i < ads.length; i++) adTotal += ads[i].duration;
+
+  // Guard 1 — ads covering (nearly) the whole playlist is a detector failure,
+  // not a real stream.
+  if (adTotal >= total * 0.8) {
+    console.log('[KENG][common] Ads rejected: ' + adTotal + 's of ' + total + 's (>=80%) — treating as detection failure');
+    return null;
+  }
+
+  // Guard 2 — a single zone spanning start to end, same failure shape.
+  if (ads.length === 1 && ads[0].start <= 0.01 && ads[0].end >= total - 0.01) {
+    console.log('[KENG][common] Ads rejected: single zone spans whole playlist');
+    return null;
+  }
+
+  return ads;
+}
+
+function _isMasterPlaylist(playlistText) {
+  return playlistText.indexOf('#EXT-X-STREAM-INF') !== -1;
+}
+
+// Resolve a possibly-relative playlist reference against its base URL.
+// Handles absolute, root-relative, protocol-relative and plain relative paths.
+function _resolveUrl(ref, baseUrl) {
+  try {
+    return new URL(ref, baseUrl).href;
+  } catch (_e) {
+    return ref;
+  }
+}
+
+// First variant URI declared in a master playlist, or '' if none.
+function _firstVariantPath(masterText) {
+  var lines = masterText.split('\n');
+  for (var i = 0; i < lines.length; i++) {
+    if (lines[i].trim().indexOf('#EXT-X-STREAM-INF') !== 0) continue;
+    for (var j = i + 1; j < lines.length; j++) {
+      var t = lines[j].trim();
+      if (!t) continue;
+      if (t.charAt(0) === '#') continue;
+      return t;
+    }
+  }
+  return '';
+}
+
+// PA-class CDN. These are served as a master playlist whose variant URL must be
+// handed to the player directly — established behaviour, keep it.
+// Every other CDN keeps its original URL so the player can still do ABR.
+function _isPaCdn(url) {
+  return url.indexOf('kkphimplayer') !== -1 || url.indexOf('phim1280.tv') !== -1;
+}
+
+function _kengFetchText(url, headers, timeoutMs) {
+  var controller = new AbortController();
+  var timer = setTimeout(function () { controller.abort(); }, timeoutMs);
+  return fetch(url, { headers: headers, signal: controller.signal })
+    .then(function (resp) {
+      clearTimeout(timer);
+      if (!resp.ok) return null;
+      return resp.text();
+    })
+    .catch(function () {
+      clearTimeout(timer);
+      return null;
+    });
+}
+
+// Fetch + resolve m3u8 → ad-annotated stream result.
+// Works on any CDN: detection is driven by playlist content, not by domain.
+// Returns { type, url, headers, ads } or null on failure.
+async function resolveAdsVariant(m3u8Url, referer) {
+  var kengUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+  var origin;
+  try { origin = new URL(m3u8Url).origin; } catch (_e) { origin = ''; }
+
+  var reqHeaders = {
+    'User-Agent': kengUA,
+    'Accept': '*/*',
+    'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Referer': referer || origin + '/',
+    'Origin': origin || '',
+  };
+
+  try {
+    var firstText = await _kengFetchText(m3u8Url, reqHeaders, 2000);
+    if (firstText === null) return null;
+
+    var mediaText = firstText;
+    var variantUrl = m3u8Url;
+
+    if (_isMasterPlaylist(firstText)) {
+      var variantPath = _firstVariantPath(firstText);
+      if (!variantPath) return null;
+      variantUrl = _resolveUrl(variantPath, m3u8Url);
+
+      var variantText = await _kengFetchText(variantUrl, reqHeaders, 2000);
+      if (variantText === null) {
+        // Variant unreachable — still playable, just without ad info.
+        mediaText = '';
+      } else {
+        mediaText = variantText;
+      }
+    }
+    // else: m3u8Url is already a media playlist — parse it directly and never
+    // mistake its first segment (.ts) for a variant URL.
+
+    var ads = mediaText ? detectAdsSafe(mediaText) : null;
+    if (ads && ads.length > 0) {
+      console.log('[KENG][common] Ads detected: ' + JSON.stringify(ads));
+    }
+
+    // PA needs the resolved variant URL; everyone else keeps the original so
+    // the player retains adaptive bitrate across renditions.
+    var outUrl = _isPaCdn(m3u8Url) ? variantUrl : m3u8Url;
+
+    console.log('[KENG][common] Stream resolved: ' + outUrl + ' | ads=' + (ads === null ? 'null' : ads.length));
+    return {
+      type: 'm3u8',
+      url: outUrl,
+      headers: { 'Referer': referer, 'User-Agent': kengUA },
+      ads: ads,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+// Main entry: probe the playlist for SSAI ads → build result.
+// Usage: var result = await makeStreamM3U8Result(m3u8Url, referer);
+async function makeStreamM3U8Result(m3u8Url, referer) {
+  var kengUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+  var result = await resolveAdsVariant(m3u8Url, referer);
+  if (result) return result;
+
+  console.log('[KENG][common] Ad probe failed, falling back to original URL');
+  return {
+    type: 'm3u8',
+    url: m3u8Url,
+    headers: { 'Referer': referer, 'User-Agent': kengUA },
+  };
+}
+
+// ── Provider: rophim12 ──────────────────────────────────────
+
+// Story 10-13 | RoPhim12 | Rail Group All — v3 (API-based)
+// Contract: railGroupAll() -> JSON { rails: [...] }
+// Performance: 1 JS call → 9 rails (v5: 9 JS calls)
+
+/**
+ * Main rail group resolver
+ * Fetches all home screen rails via APIs
+ * v6 contract: returns array of rail objects with embedded movies
+ * 
+ * Fallback strategy:
+ * - Try API endpoints first
+ * - Fall back to HTML parsing if APIs unavailable  
+ * - Skip unavailable rails gracefully
+ */
+async function railGroupAll(baseUrl) {
+  // ===== CONSTANTS (Must be inside function to avoid WebView scope conflicts) =====
+  const SITE_BASE = baseUrl;
+  const BASE_API = baseUrl + '/baseapi/api/v1';
+  const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+
+  console.log('[KENG][RoPhim12] railGroupAll() v6 — API-based');
+
+  function buildFetchOptions(refererUrl) {
+    return {
+      headers: {
+        'User-Agent': UA,
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Referer': refererUrl || SITE_BASE + '/',
+        'Origin': SITE_BASE,
+      },
+    };
+  }
+
+  /**
+   * Transform API movie to movie-data-contract format
+   * Strict mapping per docs/json-schema-contract/movie-data-contract.md
+   * @param {object} apiMovie - API response movie object
+   * @returns {object} Contract-compliant movie object
+   */
+  /**
+   * Check if movie is a trailer-only/upcoming item (should be excluded)
+   * Trailers have status='trailer' or episode_current='Trailer' 
+   */
+  function isTrailer(apiMovie) {
+    const status = (apiMovie.status || '').toLowerCase();
+    const epCurrent = (apiMovie.episode_current || '').toLowerCase();
+    const name = (apiMovie.name || '').toLowerCase();
+    const slug = (apiMovie.slug || '').toLowerCase();
+    
+    return status === 'trailer' || 
+           epCurrent === 'trailer' || 
+           name.includes('trailer') || 
+           slug.includes('.trailer');
+  }
+
+  function transformApiMovie(apiMovie) {
+    const badgeText = apiMovie.episode_current || apiMovie.quality || '';
+    return {
+      rank: 0,  // No rank in grouped view
+      title: apiMovie.name || '',
+      title_original: apiMovie.origin_name || '',  // Fixed: was original_title
+      poster_url: apiMovie.poster || apiMovie.thumbnail || '',  // Prefer poster (landscape) for home rails
+      thumbnail_url: apiMovie.thumbnail || '',  // Portrait for history/favorites
+      url: apiMovie.slug ? `${SITE_BASE}/phim/${apiMovie.slug}` : '',
+      media_type: apiMovie.type === 'series' ? 'series' : 'movie',  // Fixed: was movie_type
+      badge_text: badgeText,  // Added: required field
+      badge_sub: '',   // Added: required field
+      year: String(apiMovie.publish_year || ''),  // Fixed: convert to string
+      rating: String(apiMovie.imdb_rating || ''),  // Fixed: was imdb_rating, convert to string
+      synopsis: '',  // Added: required field
+      age_rating: '',  // Added: required field
+      episode_current: apiMovie.episode_current || '',
+      genres: []  // Added: required field
+    };
+  }
+
+  const rails = [];
+  const errors = [];
+  
+  try {
+    // ===== OPTION: API-Based Rails (Homepage Lists API) =====
+    // Fetch structured rail data directly from API
+    // No longer relying on HTML parsing as app doesn't pass HTML
+    try {
+        console.log('[KENG][RoPhim12] Fetching rails from Homepage Lists API...');
+        const apiUrl = BASE_API + '/lists/homepageLists?page=1&limit=10';
+        const apiData = await fetch(apiUrl, buildFetchOptions(SITE_BASE + '/')).then((r) => {
+          if (!r.ok) throw new Error('Homepage Lists API returned ' + r.status);
+          return r.json();
+        });
+          
+          // API structure: { status, result: { collections: [{ slug, name, movies: [...] }] } }
+          if (apiData && apiData.result && apiData.result.collections && Array.isArray(apiData.result.collections)) {
+            const apiRails = [];
+            const railMap = {
+              'phim-sap-toi': { id: 'phim_hot', is_hero_source: true, limit: 20 },
+              'phim-dien-anh-moi-coong': { id: 'cinema', limit: 16 },
+              'top-10-phim-bo-hom-nay': { id: 'top10_series', show_rank: true, limit: 10 },
+              'man-nhan-voi-phim-chieu-rap': { id: 'cinema_featured', limit: 12 },
+              'phim-han-quoc-moi': { id: 'korean', limit: 12 },
+              'phim-trung-quoc-moi': { id: 'chinese', limit: 12 },
+              'au-my': { id: 'usuk', limit: 12 },
+              'kho-tang-anime-moi-nhat': { id: 'anime', limit: 12 },
+              'dien-anh-hong-kong-o-cho-nay-nay': { id: 'hongkong', limit: 12 }
+            };
+            
+            // CTA config: rails that have show_cta enabled
+            const ctaConfig = {
+              'korean':           { js_method: 'getAllKorean' },
+              'chinese':          { js_method: 'getAllChinese' },
+              'usuk':             { js_method: 'getAllUsuk' },
+              'cinema':           { js_method: 'getAllCinema' },
+              'cinema_featured':  { js_method: 'getAllCinemaFeatured' },
+              'phim_hot':         { js_method: 'getAllPhimHot' },
+              'anime':            { js_method: 'getAllAnime' },
+              'hongkong':         { js_method: 'getAllHongKong' },
+            };
+
+            for (const apiList of apiData.result.collections) {
+              const slug = apiList.slug || '';
+              const railConfig = railMap[slug];
+              
+              if (railConfig && apiList.movies && Array.isArray(apiList.movies)) {
+                // Story 11-7: Filter out trailer/upcoming movies before transforming
+                const filteredMovies = apiList.movies.filter(m => {
+                  const movieData = m.movie ? m.movie : m;
+                  return !isTrailer(movieData);
+                });
+                
+                const movies = filteredMovies.slice(0, railConfig.limit).map((m, index) => {
+                  const movieData = m.movie ? m.movie : m;
+                  const movie = transformApiMovie(movieData);
+                  // Story 11-6: If rail has show_rank, set rank from index
+                  if (railConfig.show_rank) {
+                    movie.rank = index + 1;
+                  }
+                  return movie;
+                });
+                
+                if (movies.length > 0) {
+                  const railId = railConfig.id;
+                  const showCta = ctaConfig[railId] ? { js_method: ctaConfig[railId].js_method } : null;
+                  apiRails.push({
+                    id: railId,
+                    title: apiList.name || railId,
+                    subtitle: null,
+                    card_height_percent: 0.18,
+                    card_size_ratio: 1.5,
+                    is_hero_source: railConfig.is_hero_source || false,
+                    show_rank: railConfig.show_rank || false,
+                    movies: movies,
+                    show_cta: showCta
+                  });
+                  
+                  console.log('[KENG][RoPhim12] API rail: ' + railId + ' (' + movies.length + ' movies) cta=' + (showCta ? showCta.js_method : 'null'));
+                }
+              }
+            }
+            
+            if (apiRails.length > 0) {
+              rails.push(...apiRails);
+              console.log('[KENG][RoPhim12] Loaded ' + apiRails.length + ' rails from Homepage Lists API');
+            }
+          }
+    } catch (e) {
+        errors.push('Homepage Lists API error: ' + e.message);
+    }
+    
+    // ===== RESPONSE =====
+    if (rails.length === 0) {
+      console.warn('[KENG][RoPhim12] No rails found');
+      errors.forEach(e => console.warn('[KENG][RoPhim12] ' + e));
+
+      // Error format per contract: { error: '...' } — NOT { rails: [], error: '...' }
+      return JSON.stringify({
+        error: 'Could not fetch any rails. Errors: ' + errors.join('; ')
+      });
+    }
+
+    // Validate & return plain array per v6 Rail Group Contract
+    const validRails = rails.map(rail => ({
+      id: rail.id || 'unknown',
+      title: rail.title || 'Untitled Rail',
+      subtitle: rail.subtitle || null,
+      card_height_percent: rail.card_height_percent || 0.18,
+      card_size_ratio: rail.card_size_ratio || 0.667,
+      is_hero_source: rail.is_hero_source || false,
+      show_rank: rail.show_rank || false,
+      movies: Array.isArray(rail.movies) ? rail.movies : [],
+      show_cta: rail.show_cta || null
+    }));
+
+    console.log('[KENG][RoPhim12] Returning ' + validRails.length + ' rails');
+    return JSON.stringify(validRails);  // Plain array, NOT { rails: [...] }
+    
+  } catch (e) {
+    console.error('[KENG][RoPhim12] railGroupAll() FATAL: ' + e.message);
+    return JSON.stringify({
+      error: 'Fatal error: ' + e.message
+    });
+  }
+}
+
+// =============================================================================
+// CTA Functions — "Xem tất cả" handlers
+// API: GET /movies/by-region/{slug}?page={n}  (public, no auth)
+// API: GET /movies/by-category/{slug}?page={n} (public, no auth)
+// Contract: (page: number) → JSON.stringify(movies[]) | '[]' when exhausted
+// =============================================================================
+
+/**
+ * Shared CTA helper — fetches a paginated movie list from a public API endpoint
+ * @param {string} url - Full API URL with page param
+ * @param {string} label - Log label
+ */
+async function _fetchCtaMovies(baseUrl, url, label) {
+  const SITE_BASE = baseUrl;
+  const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+
+  function buildFetchOptions(refererUrl) {
+    return {
+      headers: {
+        'User-Agent': UA,
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Referer': refererUrl || SITE_BASE + '/',
+        'Origin': SITE_BASE,
+      },
+    };
+  }
+
+  function isTrailer(apiMovie) {
+    const status = (apiMovie.status || '').toLowerCase();
+    const epCurrent = (apiMovie.episode_current || '').toLowerCase();
+    const name = (apiMovie.name || '').toLowerCase();
+    const slug = (apiMovie.slug || '').toLowerCase();
+    
+    return status === 'trailer' || 
+           epCurrent === 'trailer' || 
+           name.includes('trailer') || 
+           slug.includes('.trailer');
+  }
+
+  function transformCtaMovie(apiMovie) {
+    const badgeText = apiMovie.episode_current || apiMovie.quality || '';
+    return {
+      rank: 0,
+      title: apiMovie.name || '',
+      title_original: apiMovie.origin_name || '',
+      poster_url: apiMovie.thumbnail || apiMovie.poster || '',  // Prefer thumbnail (portrait) for CTA
+      thumbnail_url: apiMovie.thumbnail || '',  // Portrait for history/favorites
+      url: apiMovie.slug ? SITE_BASE + '/phim/' + apiMovie.slug : '',
+      media_type: apiMovie.type === 'series' ? 'series' : 'movie',
+      badge_text: badgeText,
+      badge_sub: '',
+      year: String(apiMovie.publish_year || ''),
+      rating: String(apiMovie.imdb_rating || ''),
+      synopsis: '',
+      age_rating: '',
+      episode_current: apiMovie.episode_current || '',
+      genres: []
+    };
+  }
+
+  try {
+    const r = await fetch(url, buildFetchOptions(SITE_BASE + '/'));
+    if (!r.ok) {
+      console.warn('[KENG][RoPhim12] ' + label + ' HTTP ' + r.status);
+      return JSON.stringify([]);
+    }
+    const data = await r.json();
+    const items = data.result || [];
+    if (!Array.isArray(items) || items.length === 0) {
+      return JSON.stringify([]);
+    }
+    const filteredItems = items.filter(apiMovie => {
+      const movieData = apiMovie.movie ? apiMovie.movie : apiMovie;
+      return !isTrailer(movieData);
+    });
+    const movies = filteredItems.map(transformCtaMovie).filter(m => m.title && m.url);
+    console.log('[KENG][RoPhim12] ' + label + ' page movies: ' + movies.length);
+    return JSON.stringify(movies);
+  } catch (e) {
+    console.error('[KENG][RoPhim12] ' + label + ' error: ' + e.message);
+    return JSON.stringify([]);
+  }
+}
+
+async function getAllKorean(baseUrl, page) {
+  const p = page || 1;
+  return _fetchCtaMovies(baseUrl, 
+    baseUrl + '/baseapi/api/v1/movies/by-region/han-quoc?page=' + p,
+    'getAllKorean p=' + p
+  );
+}
+
+async function getAllChinese(baseUrl, page) {
+  const p = page || 1;
+  return _fetchCtaMovies(baseUrl, 
+    baseUrl + '/baseapi/api/v1/movies/by-region/trung-quoc?page=' + p,
+    'getAllChinese p=' + p
+  );
+}
+
+async function getAllUsuk(baseUrl, page) {
+  const p = page || 1;
+  return _fetchCtaMovies(baseUrl, 
+    baseUrl + '/baseapi/api/v1/movies/by-region/au-my?page=' + p,
+    'getAllUsuk p=' + p
+  );
+}
+
+async function getAllCinema(baseUrl, page) {
+  const p = page || 1;
+  return _fetchCtaMovies(baseUrl, 
+    baseUrl + '/baseapi/api/v1/movies/by-category/chieu-rap?page=' + p,
+    'getAllCinema p=' + p
+  );
+}
+
+/**
+ * Fetch CTA movies from homepageLists by collection slug
+ * Used for collections that don't have dedicated API endpoints
+ */
+async function _fetchCtaFromList(baseUrl, slug, page, label) {
+  const SITE_BASE = baseUrl;
+  const BASE_API = baseUrl + '/baseapi/api/v1';
+  const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+
+  function buildFetchOptions(refererUrl) {
+    return {
+      headers: {
+        'User-Agent': UA,
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Referer': refererUrl || SITE_BASE + '/',
+        'Origin': SITE_BASE,
+      },
+    };
+  }
+
+  function isTrailer(apiMovie) {
+    const status = (apiMovie.status || '').toLowerCase();
+    const epCurrent = (apiMovie.episode_current || '').toLowerCase();
+    const name = (apiMovie.name || '').toLowerCase();
+    const slug = (apiMovie.slug || '').toLowerCase();
+    
+    return status === 'trailer' || 
+           epCurrent === 'trailer' || 
+           name.includes('trailer') || 
+           slug.includes('.trailer');
+  }
+
+  function transformCtaMovie(apiMovie) {
+    const badgeText = apiMovie.episode_current || apiMovie.quality || '';
+    return {
+      rank: 0,
+      title: apiMovie.name || '',
+      title_original: apiMovie.origin_name || '',
+      poster_url: apiMovie.thumbnail || apiMovie.poster || '',
+      thumbnail_url: apiMovie.thumbnail || '',
+      url: apiMovie.slug ? SITE_BASE + '/phim/' + apiMovie.slug : '',
+      media_type: apiMovie.type === 'series' ? 'series' : 'movie',
+      badge_text: badgeText,
+      badge_sub: '',
+      year: String(apiMovie.publish_year || ''),
+      rating: String(apiMovie.imdb_rating || ''),
+      synopsis: '',
+      age_rating: '',
+      episode_current: apiMovie.episode_current || '',
+      genres: []
+    };
+  }
+
+  try {
+    // Fetch all lists, then filter by slug client-side
+    // Note: API doesn't support filtering by slug or pagination per list
+    const url = BASE_API + '/lists/homepageLists?page=1&limit=15';
+    const r = await fetch(url, buildFetchOptions(SITE_BASE + '/'));
+    if (!r.ok) {
+      console.warn('[KENG][RoPhim12] ' + label + ' HTTP ' + r.status);
+      return JSON.stringify([]);
+    }
+    const data = await r.json();
+    const collections = data?.result?.collections || [];
+    const targetCollection = collections.find(c => c.slug === slug);
+
+    if (!targetCollection || !targetCollection.movies || !Array.isArray(targetCollection.movies)) {
+      console.warn('[KENG][RoPhim12] ' + label + ' collection not found or empty');
+      return JSON.stringify([]);
+    }
+
+    // Simulate pagination by slicing the movies array
+    // Note: homepageLists returns limited items (10-12), so page 2+ will be empty
+    const pageSize = 12;
+    const p = page || 1;
+    const startIdx = (p - 1) * pageSize;
+    const endIdx = startIdx + pageSize;
+    const pageMovies = targetCollection.movies.slice(startIdx, endIdx);
+
+    const filteredPageMovies = pageMovies.filter(apiMovie => {
+      const movieData = apiMovie.movie ? apiMovie.movie : apiMovie;
+      return !isTrailer(movieData);
+    });
+    const movies = filteredPageMovies.map(transformCtaMovie).filter(m => m.title && m.url);
+    console.log('[KENG][RoPhim12] ' + label + ' page ' + p + ': ' + movies.length + ' movies');
+    return JSON.stringify(movies);
+  } catch (e) {
+    console.error('[KENG][RoPhim12] ' + label + ' error: ' + e.message);
+    return JSON.stringify([]);
+  }
+}
+
+async function getAllCinemaFeatured(baseUrl, page) {
+  return _fetchCtaFromList(baseUrl, 'man-nhan-voi-phim-chieu-rap', page, 'getAllCinemaFeatured');
+}
+
+async function getAllPhimHot(baseUrl, page) {
+  return _fetchCtaFromList(baseUrl, 'phim-sap-toi', page, 'getAllPhimHot');
+}
+
+async function getAllAnime(baseUrl, page) {
+  return _fetchCtaFromList(baseUrl, 'kho-tang-anime-moi-nhat', page, 'getAllAnime');
+}
+
+async function getAllHongKong(baseUrl, page) {
+  return _fetchCtaFromList(baseUrl, 'dien-anh-hong-kong-o-cho-nay-nay', page, 'getAllHongKong');
+}

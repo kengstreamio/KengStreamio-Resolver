@@ -1,1 +1,622 @@
-function _isAdSegment(t){return-1!==t.indexOf("/adjump/")||/convertv\d+\//.test(t)||/^\/v\d+\/.*segment_/.test(t)}function parseAdsFromPlaylist(t){for(var e=[],i=t.split("\n"),n=0,r=null,o=0;o<i.length;o++){var a=i[o].trim();if(0===a.indexOf("#EXTINF:")){var s=a.match(/#EXTINF:([\d.]+)/);if(s){var l=parseFloat(s[1]);if(!isNaN(l))_isAdSegment((i[o+1]||"").trim())?null===r&&(r=n):null!==r&&(e.push({start:Math.round(100*r)/100,end:Math.round(100*n)/100,duration:Math.round(100*(n-r))/100}),r=null),n+=l}}}return null!==r&&e.push({start:Math.round(100*r)/100,end:Math.round(100*n)/100,duration:Math.round(100*(n-r))/100}),e}function shouldDetectAdsOnServer(t){return-1!==t.indexOf("kkphimplayer")||-1!==t.indexOf("phim1280.tv")}async function resolveAdsVariant(t,e){var i,n="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";try{i=new URL(t).origin}catch(t){i=""}var r={headers:{"User-Agent":n,Accept:"*/*","Accept-Language":"vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",Referer:e||i+"/",Origin:i||""}};try{var o=await fetch(t,r);if(!o.ok)return null;for(var a=(await o.text()).split("\n"),s="",l=0;l<a.length;l++){var h=a[l].trim();if(h&&"#"!==h.charAt(0)){s=h;break}}if(!s)return null;var u=s;if("h"!==s.charAt(0))u=t.substring(0,t.lastIndexOf("/")+1)+s;var _=null;try{var m=new AbortController,c=setTimeout(function(){m.abort()},2e3),p=await fetch(u,{headers:r.headers,signal:m.signal});if(clearTimeout(c),p.ok){var g=parseAdsFromPlaylist(await p.text());g.length>0&&(_=g,console.log("[KENG][common] Ads detected: "+JSON.stringify(_)))}}catch(t){}return console.log("[KENG][common] PA resolved: "+u+" | ads="+(null===_?"null":_.length)),{type:"m3u8",url:u,headers:{Referer:e,"User-Agent":n},ads:_}}catch(t){return null}}async function makeStreamM3U8Result(t,e){if(shouldDetectAdsOnServer(t)){console.log("[KENG][common] PA CDN detected, resolving variant: "+t);var i=await resolveAdsVariant(t,e);if(i)return i;console.log("[KENG][common] PA resolve failed, fallback to original URL")}return{type:"m3u8",url:t,headers:{Referer:e,"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"}}}const _ROPHIM13_API="https://k8s.onflixcdn.com/api",_ROPHIM13_UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";function _rophim13FetchOpts(t){return{headers:{"User-Agent":_ROPHIM13_UA,Accept:"application/json, text/plain, */*","Accept-Language":"vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",Referer:t||"https://onflix.lol/",Origin:"https://onflix.lol"}}}function _rophim13TransformMovie(t,e){const i=(t.episode_current||"").toLowerCase();if("trailer"===i||"sắp chiếu"===i)return null;let n="";const r=t.vietsub||0,o=t.thuyet_minh||0;r>0&&o>0?n=`P.Đ ${r} | T.M ${o}`:r>0?n=`P.Đ ${r}`:o>0&&(n=`T.M ${o}`);const a="phim-bo"===t.type?"series":"movie",s=t.categories?t.categories.split(", ").map(t=>t.trim()).filter(Boolean):[];return{rank:0,title:t.title||"",title_original:t.original_title||"",poster_url:t.thumb_url||t.poster_url||"",url:t.slug?`${e}/phim/${t.slug}`:"",media_type:a,badge_text:t.quality||"",badge_sub:n,year:t.year?String(t.year):"",rating:t.tmdb_vote_average?String(t.tmdb_vote_average):"",synopsis:"",age_rating:t.rated||"",episode_current:t.episode_current||"",genres:s}}async function railGroupAll(t){console.log("[KENG][rophim-13] railGroupAll() v1 — API-based");const e=[{slug:"phim-hot",title:"TOP 10 Phim Hot",is_hero_source:!0,is_hot:!0},{slug:"de-xuat-cho-ban",title:"Đề Xuất Cho Bạn",js_method:"getAll_de_xuat_cho_ban"},{slug:"dang-chieu-phat",title:"Đang Chiếu Phát",js_method:"getAll_dang_chieu_phat"},{slug:"chieu_rap",title:"Phim Chiếu Rạp",is_cinema:!0,js_method:"getAll_chieu_rap"},{slug:"phim-chat-luong-cao-va-phu-de-song-ngu",title:"Phim Chất Lượng Cao và Phụ Đề Song Ngữ",js_method:"getAll_phim_chat_luong_cao_va_phu_de_song_ngu"},{slug:"hoat-hinh-chon-loc",title:"Hoạt Hình Chọn Lọc",js_method:"getAll_hoat_hinh_chon_loc"},{slug:"phieu-luu-mao-hiem",title:"Phiêu Lưu Mạo Hiểm",js_method:"getAll_phieu_luu_mao_hiem"},{slug:"phim-truyen-hinh-trung-quoc-dai-luc",title:"Phim Truyền Hình Trung Quốc Đại Lục",js_method:"getAll_phim_truyen_hinh_trung_quoc_dai_luc"},{slug:"tinh-yeu-la-nhung-gi-trai-tim-muon",title:"Tình Yêu Là Những Gì Trái Tim Muốn",js_method:"getAll_tinh_yeu_la_nhung_gi_trai_tim_muon"},{slug:"co-trang-huyen-ao",title:"Cổ Trang Huyền Ảo",js_method:"getAll_co_trang_huyen_ao"},{slug:"phim-han-quoc",title:"Phim Hàn Quốc",js_method:"getAll_phim_han_quoc"},{slug:"thanh-xuan",title:"Thanh Xuân",js_method:"getAll_thanh_xuan"},{slug:"phim-chua-lanh-tam-hon",title:"Phim Chữa Lành Tâm Hồn",js_method:"getAll_phim_chua_lanh_tam_hon"},{slug:"phim-chuyen-the-tu-tac-pham-van-hoc",title:"Phim Chuyển Thể Từ Tác Phẩm Văn Học",js_method:"getAll_phim_chuyen_the_tu_tac_pham_van_hoc"},{slug:"phim-4k",title:"Phim 4K",js_method:"getAll_phim_4k"},{slug:"phim-cong-so",title:"Phim Công Sở",js_method:"getAll_phim_cong_so"},{slug:"hinh-su-toi-pham-han-quoc",title:"Hình Sự Tội Phạm Hàn Quốc",js_method:"getAll_hinh_su_toi_pham_han_quoc"},{slug:"phim-co-trang-huyen-huyen-khong-the-bo-lo",title:"Phim Cổ Trang Huyền Huyễn Không Thể Bỏ Lỡ",js_method:"getAll_phim_co_trang_huyen_huyen_khong_the_bo_lo"},{slug:"dien-anh-au-my",title:"Điện Ảnh Âu Mỹ",js_method:"getAll_dien_anh_au_my"}],i=await Promise.all(e.map(e=>e.is_hot?async function(){try{const e=`${_ROPHIM13_API}/movies/hot`,i=await fetch(e,_rophim13FetchOpts(t+"/"));if(!i.ok)return console.log(`[KENG][rophim-13] Hot API returned ${i.status}`),[];const n=await i.json(),r=new Set,o=[];for(const t of n)t.slug&&!r.has(t.slug)&&(r.add(t.slug),o.push(t));return o.map(e=>_rophim13TransformMovie(e,t)).filter(t=>t&&t.title&&t.url)}catch(t){return console.log(`[KENG][rophim-13] Error fetching hot movies: ${t.message}`),[]}}():e.is_cinema?async function(){try{const e=`${_ROPHIM13_API}/movies?type=chieu_rap&sort=newest&page=1&limit=12`,i=await fetch(e,_rophim13FetchOpts(t+"/"));if(!i.ok)return console.log(`[KENG][rophim-13] Cinema API returned ${i.status}`),[];const n=(await i.json()).data||[],r=new Set,o=[];for(const t of n)t.slug&&!r.has(t.slug)&&(r.add(t.slug),o.push(t));return o.map(e=>_rophim13TransformMovie(e,t)).filter(t=>t&&t.title&&t.url).sort((t,e)=>(parseInt(e.year)||0)-(parseInt(t.year)||0))}catch(t){return console.log(`[KENG][rophim-13] Error fetching cinema: ${t.message}`),[]}}():async function(e){try{const i=`${_ROPHIM13_API}/themes/${e}?limit=12`,n=await fetch(i,_rophim13FetchOpts(t+"/"));if(!n.ok)return console.log(`[KENG][rophim-13] Theme ${e} returned ${n.status}`),[];const r=(await n.json()).movies||[],o=new Set,a=[];for(const t of r)t.slug&&!o.has(t.slug)&&(o.add(t.slug),a.push(t));const s=a.map(e=>_rophim13TransformMovie(e,t)).filter(t=>t&&t.title&&t.url).sort((t,e)=>(parseInt(e.year)||0)-(parseInt(t.year)||0));return console.log(`[KENG][rophim-13] Theme ${e} sorted:`,s.map(t=>`${t.title}(${t.year})`).join(", ")),s}catch(t){return console.log(`[KENG][rophim-13] Error fetching theme ${e}: ${t.message}`),[]}}(e.slug))),n=[];for(let t=0;t<e.length;t++){const r=e[t],o=i[t];0!==o.length?n.push({id:r.slug,title:r.title,subtitle:null,card_height_percent:.22,card_size_ratio:.667,is_hero_source:!0===r.is_hero_source,show_rank:!1,movies:o,show_cta:r.js_method?{js_method:r.js_method}:null}):console.log(`[KENG][rophim-13] Skipping empty rail: ${r.slug}`)}return console.log(`[KENG][rophim-13] railGroupAll() done — ${n.length} rails`),JSON.stringify(n)}async function getAll_de_xuat_cho_ban(t=1){const e=await fetch(`${_ROPHIM13_API}/themes/de-xuat-cho-ban?limit=12&page=${t}`,_rophim13FetchOpts());if(!e.ok)return JSON.stringify([]);const i=((await e.json()).movies||[]).map(t=>_rophim13TransformMovie(t,"https://onflix.lol"));return JSON.stringify(i.filter(t=>t&&t.title&&t.url).sort((t,e)=>(parseInt(e.year)||0)-(parseInt(t.year)||0)))}async function getAll_dang_chieu_phat(t=1){const e=await fetch(`${_ROPHIM13_API}/themes/dang-chieu-phat?limit=12&page=${t}`,_rophim13FetchOpts());if(!e.ok)return JSON.stringify([]);const i=((await e.json()).movies||[]).map(t=>_rophim13TransformMovie(t,"https://onflix.lol"));return JSON.stringify(i.filter(t=>t&&t.title&&t.url).sort((t,e)=>(parseInt(e.year)||0)-(parseInt(t.year)||0)))}async function getAll_phim_chat_luong_cao_va_phu_de_song_ngu(t=1){const e=await fetch(`${_ROPHIM13_API}/themes/phim-chat-luong-cao-va-phu-de-song-ngu?limit=12&page=${t}`,_rophim13FetchOpts());if(!e.ok)return JSON.stringify([]);const i=((await e.json()).movies||[]).map(t=>_rophim13TransformMovie(t,"https://onflix.lol"));return JSON.stringify(i.filter(t=>t&&t.title&&t.url).sort((t,e)=>(parseInt(e.year)||0)-(parseInt(t.year)||0)))}async function getAll_hoat_hinh_chon_loc(t=1){const e=await fetch(`${_ROPHIM13_API}/themes/hoat-hinh-chon-loc?limit=12&page=${t}`,_rophim13FetchOpts());if(!e.ok)return JSON.stringify([]);const i=((await e.json()).movies||[]).map(t=>_rophim13TransformMovie(t,"https://onflix.lol"));return JSON.stringify(i.filter(t=>t&&t.title&&t.url).sort((t,e)=>(parseInt(e.year)||0)-(parseInt(t.year)||0)))}async function getAll_phieu_luu_mao_hiem(t=1){const e=await fetch(`${_ROPHIM13_API}/themes/phieu-luu-mao-hiem?limit=12&page=${t}`,_rophim13FetchOpts());if(!e.ok)return JSON.stringify([]);const i=((await e.json()).movies||[]).map(t=>_rophim13TransformMovie(t,"https://onflix.lol"));return JSON.stringify(i.filter(t=>t&&t.title&&t.url).sort((t,e)=>(parseInt(e.year)||0)-(parseInt(t.year)||0)))}async function getAll_phim_truyen_hinh_trung_quoc_dai_luc(t=1){const e=await fetch(`${_ROPHIM13_API}/themes/phim-truyen-hinh-trung-quoc-dai-luc?limit=12&page=${t}`,_rophim13FetchOpts());if(!e.ok)return JSON.stringify([]);const i=((await e.json()).movies||[]).map(t=>_rophim13TransformMovie(t,"https://onflix.lol"));return JSON.stringify(i.filter(t=>t&&t.title&&t.url).sort((t,e)=>(parseInt(e.year)||0)-(parseInt(t.year)||0)))}async function getAll_tinh_yeu_la_nhung_gi_trai_tim_muon(t=1){const e=await fetch(`${_ROPHIM13_API}/themes/tinh-yeu-la-nhung-gi-trai-tim-muon?limit=12&page=${t}`,_rophim13FetchOpts());if(!e.ok)return JSON.stringify([]);const i=((await e.json()).movies||[]).map(t=>_rophim13TransformMovie(t,"https://onflix.lol"));return JSON.stringify(i.filter(t=>t&&t.title&&t.url).sort((t,e)=>(parseInt(e.year)||0)-(parseInt(t.year)||0)))}async function getAll_co_trang_huyen_ao(t=1){const e=await fetch(`${_ROPHIM13_API}/themes/co-trang-huyen-ao?limit=12&page=${t}`,_rophim13FetchOpts());if(!e.ok)return JSON.stringify([]);const i=((await e.json()).movies||[]).map(t=>_rophim13TransformMovie(t,"https://onflix.lol"));return JSON.stringify(i.filter(t=>t&&t.title&&t.url).sort((t,e)=>(parseInt(e.year)||0)-(parseInt(t.year)||0)))}async function getAll_phim_han_quoc(t=1){const e=await fetch(`${_ROPHIM13_API}/themes/phim-han-quoc?limit=12&page=${t}`,_rophim13FetchOpts());if(!e.ok)return JSON.stringify([]);const i=((await e.json()).movies||[]).map(t=>_rophim13TransformMovie(t,"https://onflix.lol"));return JSON.stringify(i.filter(t=>t&&t.title&&t.url).sort((t,e)=>(parseInt(e.year)||0)-(parseInt(t.year)||0)))}async function getAll_thanh_xuan(t=1){const e=await fetch(`${_ROPHIM13_API}/themes/thanh-xuan?limit=12&page=${t}`,_rophim13FetchOpts());if(!e.ok)return JSON.stringify([]);const i=((await e.json()).movies||[]).map(t=>_rophim13TransformMovie(t,"https://onflix.lol"));return JSON.stringify(i.filter(t=>t&&t.title&&t.url).sort((t,e)=>(parseInt(e.year)||0)-(parseInt(t.year)||0)))}async function getAll_phim_chua_lanh_tam_hon(t=1){const e=await fetch(`${_ROPHIM13_API}/themes/phim-chua-lanh-tam-hon?limit=12&page=${t}`,_rophim13FetchOpts());if(!e.ok)return JSON.stringify([]);const i=((await e.json()).movies||[]).map(t=>_rophim13TransformMovie(t,"https://onflix.lol"));return JSON.stringify(i.filter(t=>t&&t.title&&t.url).sort((t,e)=>(parseInt(e.year)||0)-(parseInt(t.year)||0)))}async function getAll_phim_chuyen_the_tu_tac_pham_van_hoc(t=1){const e=await fetch(`${_ROPHIM13_API}/themes/phim-chuyen-the-tu-tac-pham-van-hoc?limit=12&page=${t}`,_rophim13FetchOpts());if(!e.ok)return JSON.stringify([]);const i=((await e.json()).movies||[]).map(t=>_rophim13TransformMovie(t,"https://onflix.lol"));return JSON.stringify(i.filter(t=>t&&t.title&&t.url).sort((t,e)=>(parseInt(e.year)||0)-(parseInt(t.year)||0)))}async function getAll_phim_4k(t=1){const e=await fetch(`${_ROPHIM13_API}/themes/phim-4k?limit=12&page=${t}`,_rophim13FetchOpts());if(!e.ok)return JSON.stringify([]);const i=((await e.json()).movies||[]).map(t=>_rophim13TransformMovie(t,"https://onflix.lol"));return JSON.stringify(i.filter(t=>t&&t.title&&t.url).sort((t,e)=>(parseInt(e.year)||0)-(parseInt(t.year)||0)))}async function getAll_phim_cong_so(t=1){const e=await fetch(`${_ROPHIM13_API}/themes/phim-cong-so?limit=12&page=${t}`,_rophim13FetchOpts());if(!e.ok)return JSON.stringify([]);const i=((await e.json()).movies||[]).map(t=>_rophim13TransformMovie(t,"https://onflix.lol"));return JSON.stringify(i.filter(t=>t&&t.title&&t.url).sort((t,e)=>(parseInt(e.year)||0)-(parseInt(t.year)||0)))}async function getAll_hinh_su_toi_pham_han_quoc(t=1){const e=await fetch(`${_ROPHIM13_API}/themes/hinh-su-toi-pham-han-quoc?limit=12&page=${t}`,_rophim13FetchOpts());if(!e.ok)return JSON.stringify([]);const i=((await e.json()).movies||[]).map(t=>_rophim13TransformMovie(t,"https://onflix.lol"));return JSON.stringify(i.filter(t=>t&&t.title&&t.url).sort((t,e)=>(parseInt(e.year)||0)-(parseInt(t.year)||0)))}async function getAll_phim_co_trang_huyen_huyen_khong_the_bo_lo(t=1){const e=await fetch(`${_ROPHIM13_API}/themes/phim-co-trang-huyen-huyen-khong-the-bo-lo?limit=12&page=${t}`,_rophim13FetchOpts());if(!e.ok)return JSON.stringify([]);const i=((await e.json()).movies||[]).map(t=>_rophim13TransformMovie(t,"https://onflix.lol"));return JSON.stringify(i.filter(t=>t&&t.title&&t.url).sort((t,e)=>(parseInt(e.year)||0)-(parseInt(t.year)||0)))}async function getAll_dien_anh_au_my(t=1){const e=await fetch(`${_ROPHIM13_API}/themes/dien-anh-au-my?limit=12&page=${t}`,_rophim13FetchOpts());if(!e.ok)return JSON.stringify([]);const i=((await e.json()).movies||[]).map(t=>_rophim13TransformMovie(t,"https://onflix.lol"));return JSON.stringify(i.filter(t=>t&&t.title&&t.url).sort((t,e)=>(parseInt(e.year)||0)-(parseInt(t.year)||0)))}async function getAll_chieu_rap(t="https://onflix.lol",e=1){try{const i=`${_ROPHIM13_API}/movies?type=chieu_rap&sort=newest&page=${e}&limit=12`,n=await fetch(i,_rophim13FetchOpts(t+"/"));if(console.log(`[KENG][rophim-13] getAll_chieu_rap status=${n.status}`),!n.ok)return console.log(`[KENG][rophim-13] getAll_chieu_rap HTTP error ${n.status}`),JSON.stringify([]);const r=(await n.json()).data||[];console.log(`[KENG][rophim-13] getAll_chieu_rap raw=${r.length}`);const o=r.map(e=>_rophim13TransformMovie(e,t)).filter(t=>t&&t.title&&t.url).sort((t,e)=>(parseInt(e.year)||0)-(parseInt(t.year)||0));return console.log(`[KENG][rophim-13] getAll_chieu_rap filtered=${o.length}`),JSON.stringify(o)}catch(t){return console.log(`[KENG][rophim-13] getAll_chieu_rap error=${t.message}`),JSON.stringify([])}}
+/**
+ * Keng Common JS — shared utilities injected before each provider's resolver.
+ * Keep this file self-contained; it will be prepended to provider JS at deploy time.
+ *
+ * Contract: all functions are available in provider resolvers via normal JS scoping.
+ */
+
+// ── HLS Ad Detection ────────────────────────────────────────────────────────
+// Parse HLS variant playlist for SSAI ad segments.
+// Detects ad patterns in HLS segment URLs:
+//   - /adjump/ URLs
+//   - /vN/ prefix with segment_XXX.ts (numbered SSAI ad segments, any version)
+//
+// NOTE: every clause must evaluate to a boolean. Never compare a .test() result
+// against -1 — `-1 !== false` is true, which classifies every segment as an ad
+// and makes the whole movie look like one giant ad break.
+//
+// `convertvN/` was removed 2026-08-15: it is a FALSE POSITIVE. On
+// s5.phim1280.tv those segments carry the same random 8-char names as the
+// content around them, sit in a playlist with zero /adjump/ segments, and were
+// confirmed on-device to be ordinary film — they are re-transcoded segments,
+// and the #EXT-X-DISCONTINUITY around them marks an encoder change, not an ad
+// break. Flagging them cut ~25s of real movie out of a single title.
+//
+// Bias: a false positive removes film the user paid attention to; a false
+// negative merely shows an ad. Prefer missing an ad over cutting content.
+function _isAdSegment(segment) {
+  return segment.indexOf('/adjump/') !== -1
+      || /^\/v\d+\/.*segment_/.test(segment);
+}
+
+function parseAdsFromPlaylist(playlistText) {
+  var ads = [];
+  var lines = playlistText.split('\n');
+  var cumulative = 0.0;
+  var adStart = null;
+
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (line.indexOf('#EXTINF:') !== 0) continue;
+
+    var match = line.match(/#EXTINF:([\d.]+)/);
+    if (!match) continue;
+    var duration = parseFloat(match[1]);
+    if (isNaN(duration)) continue;
+
+    var segment = (lines[i + 1] || '').trim();
+
+    if (_isAdSegment(segment)) {
+      if (adStart === null) adStart = cumulative;
+    } else {
+      if (adStart !== null) {
+        ads.push({
+          start: Math.round(adStart * 100) / 100,
+          end: Math.round(cumulative * 100) / 100,
+          duration: Math.round((cumulative - adStart) * 100) / 100,
+        });
+        adStart = null;
+      }
+    }
+    cumulative += duration;
+  }
+
+  if (adStart !== null) {
+    ads.push({
+      start: Math.round(adStart * 100) / 100,
+      end: Math.round(cumulative * 100) / 100,
+      duration: Math.round((cumulative - adStart) * 100) / 100,
+    });
+  }
+
+  return ads;
+}
+
+// Total playable duration of a playlist, in seconds.
+function _playlistTotalDuration(playlistText) {
+  var lines = playlistText.split('\n');
+  var total = 0.0;
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (line.indexOf('#EXTINF:') !== 0) continue;
+    var match = line.match(/#EXTINF:([\d.]+)/);
+    if (!match) continue;
+    var d = parseFloat(match[1]);
+    if (!isNaN(d)) total += d;
+  }
+  return Math.round(total * 100) / 100;
+}
+
+// Sanity-checked ad detection.
+// Returns an array of ad zones, or null when the result looks bogus — a
+// mis-classifying detector would otherwise report the entire movie as one ad
+// zone and the player would seek straight to the end.
+//
+// null means "detection not trustworthy" and is distinct from [] ("no ads"),
+// which the Dart side relies on (see StreamResult.ads).
+function detectAdsSafe(playlistText) {
+  var total = _playlistTotalDuration(playlistText);
+  if (total <= 0) return null;
+
+  var ads = parseAdsFromPlaylist(playlistText);
+  if (ads.length === 0) return [];
+
+  var adTotal = 0.0;
+  for (var i = 0; i < ads.length; i++) adTotal += ads[i].duration;
+
+  // Guard 1 — ads covering (nearly) the whole playlist is a detector failure,
+  // not a real stream.
+  if (adTotal >= total * 0.8) {
+    console.log('[KENG][common] Ads rejected: ' + adTotal + 's of ' + total + 's (>=80%) — treating as detection failure');
+    return null;
+  }
+
+  // Guard 2 — a single zone spanning start to end, same failure shape.
+  if (ads.length === 1 && ads[0].start <= 0.01 && ads[0].end >= total - 0.01) {
+    console.log('[KENG][common] Ads rejected: single zone spans whole playlist');
+    return null;
+  }
+
+  return ads;
+}
+
+function _isMasterPlaylist(playlistText) {
+  return playlistText.indexOf('#EXT-X-STREAM-INF') !== -1;
+}
+
+// Resolve a possibly-relative playlist reference against its base URL.
+// Handles absolute, root-relative, protocol-relative and plain relative paths.
+function _resolveUrl(ref, baseUrl) {
+  try {
+    return new URL(ref, baseUrl).href;
+  } catch (_e) {
+    return ref;
+  }
+}
+
+// First variant URI declared in a master playlist, or '' if none.
+function _firstVariantPath(masterText) {
+  var lines = masterText.split('\n');
+  for (var i = 0; i < lines.length; i++) {
+    if (lines[i].trim().indexOf('#EXT-X-STREAM-INF') !== 0) continue;
+    for (var j = i + 1; j < lines.length; j++) {
+      var t = lines[j].trim();
+      if (!t) continue;
+      if (t.charAt(0) === '#') continue;
+      return t;
+    }
+  }
+  return '';
+}
+
+// PA-class CDN. These are served as a master playlist whose variant URL must be
+// handed to the player directly — established behaviour, keep it.
+// Every other CDN keeps its original URL so the player can still do ABR.
+function _isPaCdn(url) {
+  return url.indexOf('kkphimplayer') !== -1 || url.indexOf('phim1280.tv') !== -1;
+}
+
+function _kengFetchText(url, headers, timeoutMs) {
+  var controller = new AbortController();
+  var timer = setTimeout(function () { controller.abort(); }, timeoutMs);
+  return fetch(url, { headers: headers, signal: controller.signal })
+    .then(function (resp) {
+      clearTimeout(timer);
+      if (!resp.ok) return null;
+      return resp.text();
+    })
+    .catch(function () {
+      clearTimeout(timer);
+      return null;
+    });
+}
+
+// Fetch + resolve m3u8 → ad-annotated stream result.
+// Works on any CDN: detection is driven by playlist content, not by domain.
+// Returns { type, url, headers, ads } or null on failure.
+async function resolveAdsVariant(m3u8Url, referer) {
+  var kengUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+  var origin;
+  try { origin = new URL(m3u8Url).origin; } catch (_e) { origin = ''; }
+
+  var reqHeaders = {
+    'User-Agent': kengUA,
+    'Accept': '*/*',
+    'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Referer': referer || origin + '/',
+    'Origin': origin || '',
+  };
+
+  try {
+    var firstText = await _kengFetchText(m3u8Url, reqHeaders, 2000);
+    if (firstText === null) return null;
+
+    var mediaText = firstText;
+    var variantUrl = m3u8Url;
+
+    if (_isMasterPlaylist(firstText)) {
+      var variantPath = _firstVariantPath(firstText);
+      if (!variantPath) return null;
+      variantUrl = _resolveUrl(variantPath, m3u8Url);
+
+      var variantText = await _kengFetchText(variantUrl, reqHeaders, 2000);
+      if (variantText === null) {
+        // Variant unreachable — still playable, just without ad info.
+        mediaText = '';
+      } else {
+        mediaText = variantText;
+      }
+    }
+    // else: m3u8Url is already a media playlist — parse it directly and never
+    // mistake its first segment (.ts) for a variant URL.
+
+    var ads = mediaText ? detectAdsSafe(mediaText) : null;
+    if (ads && ads.length > 0) {
+      console.log('[KENG][common] Ads detected: ' + JSON.stringify(ads));
+    }
+
+    // PA needs the resolved variant URL; everyone else keeps the original so
+    // the player retains adaptive bitrate across renditions.
+    var outUrl = _isPaCdn(m3u8Url) ? variantUrl : m3u8Url;
+
+    console.log('[KENG][common] Stream resolved: ' + outUrl + ' | ads=' + (ads === null ? 'null' : ads.length));
+    return {
+      type: 'm3u8',
+      url: outUrl,
+      headers: { 'Referer': referer, 'User-Agent': kengUA },
+      ads: ads,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+// Main entry: probe the playlist for SSAI ads → build result.
+// Usage: var result = await makeStreamM3U8Result(m3u8Url, referer);
+async function makeStreamM3U8Result(m3u8Url, referer) {
+  var kengUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+  var result = await resolveAdsVariant(m3u8Url, referer);
+  if (result) return result;
+
+  console.log('[KENG][common] Ad probe failed, falling back to original URL');
+  return {
+    type: 'm3u8',
+    url: m3u8Url,
+    headers: { 'Referer': referer, 'User-Agent': kengUA },
+  };
+}
+
+// ── Provider: rophim13 ──────────────────────────────────────
+
+// Provider: rophim-13 | Site: https://onflix.lol
+// Contract: railGroupAll(baseUrl) -> JSON { rails: [...] }
+// API: https://k8s.onflixcdn.com/api/themes/{slug}?limit=12
+// v6.1 rail-group contract — with CTA functions
+
+// ===== SHARED CONSTANTS (file scope — safe, no WebView conflicts) =====
+const _ROPHIM13_API = 'https://k8s.onflixcdn.com/api';
+const _ROPHIM13_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+
+function _rophim13FetchOpts(referer) {
+  return {
+    headers: {
+      'User-Agent': _ROPHIM13_UA,
+      'Accept': 'application/json, text/plain, */*',
+      'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Referer': referer || 'https://onflix.lol/',
+      'Origin': 'https://onflix.lol',
+    },
+  };
+}
+
+function _rophim13TransformMovie(m, siteBase) {
+  // Filter out "Trailer" and "Sắp chiếu" (coming soon) movies
+  const ec = (m.episode_current || '').toLowerCase();
+  if (ec === 'trailer' || ec === 'sắp chiếu') return null;
+
+  let badgeSub = '';
+  const vs = m.vietsub || 0;
+  const tm = m.thuyet_minh || 0;
+  if (vs > 0 && tm > 0) {
+    badgeSub = `P.Đ ${vs} | T.M ${tm}`;
+  } else if (vs > 0) {
+    badgeSub = `P.Đ ${vs}`;
+  } else if (tm > 0) {
+    badgeSub = `T.M ${tm}`;
+  }
+  const mediaType = m.type === 'phim-bo' ? 'series' : 'movie';
+  const genres = m.categories
+    ? m.categories.split(', ').map(g => g.trim()).filter(Boolean)
+    : [];
+  return {
+    rank: 0,
+    title: m.title || '',
+    title_original: m.original_title || '',
+    poster_url: m.thumb_url || m.poster_url || '',
+    url: m.slug ? `${siteBase}/phim/${m.slug}` : '',
+    media_type: mediaType,
+    badge_text: m.quality || '',
+    badge_sub: badgeSub,
+    year: m.year ? String(m.year) : '',
+    rating: m.tmdb_vote_average ? String(m.tmdb_vote_average) : '',
+    synopsis: '',
+    age_rating: m.rated || '',
+    episode_current: m.episode_current || '',
+    genres: genres,
+  };
+}
+
+/**
+ * Main rail group resolver for onflix.lol
+ * Fetches all 17 home screen rails via REST API
+ * Returns { rails: [...] } per v6 contract
+ */
+async function railGroupAll(baseUrl) {
+  console.log('[KENG][rophim-13] railGroupAll() v1 — API-based');
+
+  /**
+   * Fetch movies for a single theme slug (page 1, limit 12)
+   */
+  async function fetchThemeMovies(slug) {
+    try {
+      const url = `${_ROPHIM13_API}/themes/${slug}?limit=12`;
+      const res = await fetch(url, _rophim13FetchOpts(baseUrl + '/'));
+      if (!res.ok) {
+        console.log(`[KENG][rophim-13] Theme ${slug} returned ${res.status}`);
+        return [];
+      }
+      const data = await res.json();
+      const movies = data.movies || [];
+      const seen = new Set();
+      const unique = [];
+      for (const m of movies) {
+        if (m.slug && !seen.has(m.slug)) {
+          seen.add(m.slug);
+          unique.push(m);
+        }
+      }
+      const result = unique
+        .map(m => _rophim13TransformMovie(m, baseUrl))
+        .filter(m => m && m.title && m.url)
+        .sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
+      console.log(`[KENG][rophim-13] Theme ${slug} sorted:`, result.map(m => `${m.title}(${m.year})`).join(', '));
+      return result;
+    } catch (e) {
+      console.log(`[KENG][rophim-13] Error fetching theme ${slug}: ${e.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Fetch cinema movies via /api/movies?type=chieu_rap (different endpoint from themes)
+   */
+  async function fetchCinemaMovies() {
+    try {
+      const url = `${_ROPHIM13_API}/movies?type=chieu_rap&sort=newest&page=1&limit=12`;
+      const res = await fetch(url, _rophim13FetchOpts(baseUrl + '/'));
+      if (!res.ok) {
+        console.log(`[KENG][rophim-13] Cinema API returned ${res.status}`);
+        return [];
+      }
+      const data = await res.json();
+      const movies = data.data || [];
+      const seen = new Set();
+      const unique = [];
+      for (const m of movies) {
+        if (m.slug && !seen.has(m.slug)) {
+          seen.add(m.slug);
+          unique.push(m);
+        }
+      }
+      return unique
+        .map(m => _rophim13TransformMovie(m, baseUrl))
+        .filter(m => m && m.title && m.url)
+        .sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
+    } catch (e) {
+      console.log(`[KENG][rophim-13] Error fetching cinema: ${e.message}`);
+      return [];
+    }
+  }
+
+  // ===== FETCH HOT MOVIES (/api/movies/hot — returns direct array of 10) =====
+  async function fetchHotMovies() {
+    try {
+      const url = `${_ROPHIM13_API}/movies/hot`;
+      const res = await fetch(url, _rophim13FetchOpts(baseUrl + '/'));
+      if (!res.ok) {
+        console.log(`[KENG][rophim-13] Hot API returned ${res.status}`);
+        return [];
+      }
+      const movies = await res.json();
+      const seen = new Set();
+      const unique = [];
+      for (const m of movies) {
+        if (m.slug && !seen.has(m.slug)) {
+          seen.add(m.slug);
+          unique.push(m);
+        }
+      }
+      return unique.map(m => _rophim13TransformMovie(m, baseUrl)).filter(m => m && m.title && m.url);
+    } catch (e) {
+      console.log(`[KENG][rophim-13] Error fetching hot movies: ${e.message}`);
+      return [];
+    }
+  }
+
+  // ===== THEME DEFINITIONS (ordered by stt) =====
+  const THEMES = [
+    { slug: 'phim-hot',                                  title: 'TOP 10 Phim Hot',                               is_hero_source: true, is_hot: true },
+    { slug: 'de-xuat-cho-ban',                          title: 'Đề Xuất Cho Bạn',                                                     js_method: 'getAll_de_xuat_cho_ban' },
+    { slug: 'dang-chieu-phat',                          title: 'Đang Chiếu Phát',                                                     js_method: 'getAll_dang_chieu_phat' },
+    { slug: 'chieu_rap',                                title: 'Phim Chiếu Rạp',                                                      is_cinema: true, js_method: 'getAll_chieu_rap' },
+    { slug: 'phim-chat-luong-cao-va-phu-de-song-ngu',   title: 'Phim Chất Lượng Cao và Phụ Đề Song Ngữ',                           js_method: 'getAll_phim_chat_luong_cao_va_phu_de_song_ngu' },
+    { slug: 'hoat-hinh-chon-loc',                       title: 'Hoạt Hình Chọn Lọc',                                                js_method: 'getAll_hoat_hinh_chon_loc' },
+    { slug: 'phieu-luu-mao-hiem',                       title: 'Phiêu Lưu Mạo Hiểm',                                                js_method: 'getAll_phieu_luu_mao_hiem' },
+    { slug: 'phim-truyen-hinh-trung-quoc-dai-luc',      title: 'Phim Truyền Hình Trung Quốc Đại Lục',                              js_method: 'getAll_phim_truyen_hinh_trung_quoc_dai_luc' },
+    { slug: 'tinh-yeu-la-nhung-gi-trai-tim-muon',       title: 'Tình Yêu Là Những Gì Trái Tim Muốn',                               js_method: 'getAll_tinh_yeu_la_nhung_gi_trai_tim_muon' },
+    { slug: 'co-trang-huyen-ao',                        title: 'Cổ Trang Huyền Ảo',                                                 js_method: 'getAll_co_trang_huyen_ao' },
+    { slug: 'phim-han-quoc',                            title: 'Phim Hàn Quốc',                                                     js_method: 'getAll_phim_han_quoc' },
+    { slug: 'thanh-xuan',                               title: 'Thanh Xuân',                                                        js_method: 'getAll_thanh_xuan' },
+    { slug: 'phim-chua-lanh-tam-hon',                   title: 'Phim Chữa Lành Tâm Hồn',                                           js_method: 'getAll_phim_chua_lanh_tam_hon' },
+    { slug: 'phim-chuyen-the-tu-tac-pham-van-hoc',      title: 'Phim Chuyển Thể Từ Tác Phẩm Văn Học',                             js_method: 'getAll_phim_chuyen_the_tu_tac_pham_van_hoc' },
+    { slug: 'phim-4k',                                  title: 'Phim 4K',                                                           js_method: 'getAll_phim_4k' },
+    { slug: 'phim-cong-so',                             title: 'Phim Công Sở',                                                      js_method: 'getAll_phim_cong_so' },
+    { slug: 'hinh-su-toi-pham-han-quoc',                title: 'Hình Sự Tội Phạm Hàn Quốc',                                        js_method: 'getAll_hinh_su_toi_pham_han_quoc' },
+    { slug: 'phim-co-trang-huyen-huyen-khong-the-bo-lo', title: 'Phim Cổ Trang Huyền Huyễn Không Thể Bỏ Lỡ',                      js_method: 'getAll_phim_co_trang_huyen_huyen_khong_the_bo_lo' },
+    { slug: 'dien-anh-au-my',                           title: 'Điện Ảnh Âu Mỹ',                                                    js_method: 'getAll_dien_anh_au_my' },
+  ];
+
+  // ===== FETCH ALL RAILS IN PARALLEL =====
+  const railResults = await Promise.all(
+    THEMES.map(theme => {
+      if (theme.is_hot) return fetchHotMovies();
+      if (theme.is_cinema) return fetchCinemaMovies();
+      return fetchThemeMovies(theme.slug);
+    })
+  );
+
+  const rails = [];
+  for (let i = 0; i < THEMES.length; i++) {
+    const theme = THEMES[i];
+    const movies = railResults[i];
+    if (movies.length === 0) {
+      console.log(`[KENG][rophim-13] Skipping empty rail: ${theme.slug}`);
+      continue;
+    }
+    rails.push({
+      id: theme.slug,
+      title: theme.title,
+      subtitle: null,
+      card_height_percent: 0.22,
+      card_size_ratio: 0.667,
+      is_hero_source: theme.is_hero_source === true,
+      show_rank: false,
+      movies: movies,
+      show_cta: theme.js_method ? { js_method: theme.js_method } : null,
+    });
+  }
+
+  console.log(`[KENG][rophim-13] railGroupAll() done — ${rails.length} rails`);
+  return JSON.stringify(rails);
+}
+
+// ===== CTA FUNCTIONS (one per theme — called when user taps "Xem tất cả") =====
+// Contract: accept page (1-based) → return JSON.stringify(movies) or []
+
+async function getAll_de_xuat_cho_ban(page = 1) {
+  const res = await fetch(`${_ROPHIM13_API}/themes/de-xuat-cho-ban?limit=12&page=${page}`, _rophim13FetchOpts());
+  if (!res.ok) return JSON.stringify([]);
+  const data = await res.json();
+  const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
+  return JSON.stringify(movies.filter(m => m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
+}
+
+async function getAll_dang_chieu_phat(page = 1) {
+  const res = await fetch(`${_ROPHIM13_API}/themes/dang-chieu-phat?limit=12&page=${page}`, _rophim13FetchOpts());
+  if (!res.ok) return JSON.stringify([]);
+  const data = await res.json();
+  const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
+  return JSON.stringify(movies.filter(m => m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
+}
+
+async function getAll_phim_chat_luong_cao_va_phu_de_song_ngu(page = 1) {
+  const res = await fetch(`${_ROPHIM13_API}/themes/phim-chat-luong-cao-va-phu-de-song-ngu?limit=12&page=${page}`, _rophim13FetchOpts());
+  if (!res.ok) return JSON.stringify([]);
+  const data = await res.json();
+  const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
+  return JSON.stringify(movies.filter(m => m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
+}
+
+async function getAll_hoat_hinh_chon_loc(page = 1) {
+  const res = await fetch(`${_ROPHIM13_API}/themes/hoat-hinh-chon-loc?limit=12&page=${page}`, _rophim13FetchOpts());
+  if (!res.ok) return JSON.stringify([]);
+  const data = await res.json();
+  const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
+  return JSON.stringify(movies.filter(m => m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
+}
+
+async function getAll_phieu_luu_mao_hiem(page = 1) {
+  const res = await fetch(`${_ROPHIM13_API}/themes/phieu-luu-mao-hiem?limit=12&page=${page}`, _rophim13FetchOpts());
+  if (!res.ok) return JSON.stringify([]);
+  const data = await res.json();
+  const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
+  return JSON.stringify(movies.filter(m => m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
+}
+
+async function getAll_phim_truyen_hinh_trung_quoc_dai_luc(page = 1) {
+  const res = await fetch(`${_ROPHIM13_API}/themes/phim-truyen-hinh-trung-quoc-dai-luc?limit=12&page=${page}`, _rophim13FetchOpts());
+  if (!res.ok) return JSON.stringify([]);
+  const data = await res.json();
+  const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
+  return JSON.stringify(movies.filter(m => m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
+}
+
+async function getAll_tinh_yeu_la_nhung_gi_trai_tim_muon(page = 1) {
+  const res = await fetch(`${_ROPHIM13_API}/themes/tinh-yeu-la-nhung-gi-trai-tim-muon?limit=12&page=${page}`, _rophim13FetchOpts());
+  if (!res.ok) return JSON.stringify([]);
+  const data = await res.json();
+  const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
+  return JSON.stringify(movies.filter(m => m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
+}
+
+async function getAll_co_trang_huyen_ao(page = 1) {
+  const res = await fetch(`${_ROPHIM13_API}/themes/co-trang-huyen-ao?limit=12&page=${page}`, _rophim13FetchOpts());
+  if (!res.ok) return JSON.stringify([]);
+  const data = await res.json();
+  const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
+  return JSON.stringify(movies.filter(m => m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
+}
+
+async function getAll_phim_han_quoc(page = 1) {
+  const res = await fetch(`${_ROPHIM13_API}/themes/phim-han-quoc?limit=12&page=${page}`, _rophim13FetchOpts());
+  if (!res.ok) return JSON.stringify([]);
+  const data = await res.json();
+  const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
+  return JSON.stringify(movies.filter(m => m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
+}
+
+async function getAll_thanh_xuan(page = 1) {
+  const res = await fetch(`${_ROPHIM13_API}/themes/thanh-xuan?limit=12&page=${page}`, _rophim13FetchOpts());
+  if (!res.ok) return JSON.stringify([]);
+  const data = await res.json();
+  const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
+  return JSON.stringify(movies.filter(m => m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
+}
+
+async function getAll_phim_chua_lanh_tam_hon(page = 1) {
+  const res = await fetch(`${_ROPHIM13_API}/themes/phim-chua-lanh-tam-hon?limit=12&page=${page}`, _rophim13FetchOpts());
+  if (!res.ok) return JSON.stringify([]);
+  const data = await res.json();
+  const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
+  return JSON.stringify(movies.filter(m => m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
+}
+
+async function getAll_phim_chuyen_the_tu_tac_pham_van_hoc(page = 1) {
+  const res = await fetch(`${_ROPHIM13_API}/themes/phim-chuyen-the-tu-tac-pham-van-hoc?limit=12&page=${page}`, _rophim13FetchOpts());
+  if (!res.ok) return JSON.stringify([]);
+  const data = await res.json();
+  const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
+  return JSON.stringify(movies.filter(m => m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
+}
+
+async function getAll_phim_4k(page = 1) {
+  const res = await fetch(`${_ROPHIM13_API}/themes/phim-4k?limit=12&page=${page}`, _rophim13FetchOpts());
+  if (!res.ok) return JSON.stringify([]);
+  const data = await res.json();
+  const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
+  return JSON.stringify(movies.filter(m => m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
+}
+
+async function getAll_phim_cong_so(page = 1) {
+  const res = await fetch(`${_ROPHIM13_API}/themes/phim-cong-so?limit=12&page=${page}`, _rophim13FetchOpts());
+  if (!res.ok) return JSON.stringify([]);
+  const data = await res.json();
+  const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
+  return JSON.stringify(movies.filter(m => m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
+}
+
+async function getAll_hinh_su_toi_pham_han_quoc(page = 1) {
+  const res = await fetch(`${_ROPHIM13_API}/themes/hinh-su-toi-pham-han-quoc?limit=12&page=${page}`, _rophim13FetchOpts());
+  if (!res.ok) return JSON.stringify([]);
+  const data = await res.json();
+  const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
+  return JSON.stringify(movies.filter(m => m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
+}
+
+async function getAll_phim_co_trang_huyen_huyen_khong_the_bo_lo(page = 1) {
+  const res = await fetch(`${_ROPHIM13_API}/themes/phim-co-trang-huyen-huyen-khong-the-bo-lo?limit=12&page=${page}`, _rophim13FetchOpts());
+  if (!res.ok) return JSON.stringify([]);
+  const data = await res.json();
+  const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
+  return JSON.stringify(movies.filter(m => m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
+}
+
+async function getAll_dien_anh_au_my(page = 1) {
+  const res = await fetch(`${_ROPHIM13_API}/themes/dien-anh-au-my?limit=12&page=${page}`, _rophim13FetchOpts());
+  if (!res.ok) return JSON.stringify([]);
+  const data = await res.json();
+  const movies = (data.movies || []).map(m => _rophim13TransformMovie(m, 'https://onflix.lol'));
+  return JSON.stringify(movies.filter(m => m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0)));
+}
+
+async function getAll_chieu_rap(baseUrl = 'https://onflix.lol', page = 1) {
+  try {
+    const url = `${_ROPHIM13_API}/movies?type=chieu_rap&sort=newest&page=${page}&limit=12`;
+    const res = await fetch(url, _rophim13FetchOpts(baseUrl + '/'));
+    console.log(`[KENG][rophim-13] getAll_chieu_rap status=${res.status}`);
+    if (!res.ok) {
+      console.log(`[KENG][rophim-13] getAll_chieu_rap HTTP error ${res.status}`);
+      return JSON.stringify([]);
+    }
+    const data = await res.json();
+    const raw = data.data || [];
+    console.log(`[KENG][rophim-13] getAll_chieu_rap raw=${raw.length}`);
+    const movies = raw.map(m => _rophim13TransformMovie(m, baseUrl));
+    const filtered = movies.filter(m => m && m.title && m.url).sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
+    console.log(`[KENG][rophim-13] getAll_chieu_rap filtered=${filtered.length}`);
+    return JSON.stringify(filtered);
+  } catch (e) {
+    console.log(`[KENG][rophim-13] getAll_chieu_rap error=${e.message}`);
+    return JSON.stringify([]);
+  }
+}

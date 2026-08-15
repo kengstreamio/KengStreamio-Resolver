@@ -1,1 +1,429 @@
-function _isAdSegment(e){return-1!==e.indexOf("/adjump/")||/convertv\d+\//.test(e)||/^\/v\d+\/.*segment_/.test(e)}function parseAdsFromPlaylist(e){for(var t=[],n=e.split("\n"),r=0,i=null,l=0;l<n.length;l++){var o=n[l].trim();if(0===o.indexOf("#EXTINF:")){var s=o.match(/#EXTINF:([\d.]+)/);if(s){var a=parseFloat(s[1]);if(!isNaN(a))_isAdSegment((n[l+1]||"").trim())?null===i&&(i=r):null!==i&&(t.push({start:Math.round(100*i)/100,end:Math.round(100*r)/100,duration:Math.round(100*(r-i))/100}),i=null),r+=a}}}return null!==i&&t.push({start:Math.round(100*i)/100,end:Math.round(100*r)/100,duration:Math.round(100*(r-i))/100}),t}function shouldDetectAdsOnServer(e){return-1!==e.indexOf("kkphimplayer")||-1!==e.indexOf("phim1280.tv")}async function resolveAdsVariant(e,t){var n,r="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";try{n=new URL(e).origin}catch(e){n=""}var i={headers:{"User-Agent":r,Accept:"*/*","Accept-Language":"vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",Referer:t||n+"/",Origin:n||""}};try{var l=await fetch(e,i);if(!l.ok)return null;for(var o=(await l.text()).split("\n"),s="",a=0;a<o.length;a++){var c=o[a].trim();if(c&&"#"!==c.charAt(0)){s=c;break}}if(!s)return null;var u=s;if("h"!==s.charAt(0))u=e.substring(0,e.lastIndexOf("/")+1)+s;var g=null;try{var h=new AbortController,f=setTimeout(function(){h.abort()},2e3),m=await fetch(u,{headers:i.headers,signal:h.signal});if(clearTimeout(f),m.ok){var d=parseAdsFromPlaylist(await m.text());d.length>0&&(g=d,console.log("[KENG][common] Ads detected: "+JSON.stringify(g)))}}catch(e){}return console.log("[KENG][common] PA resolved: "+u+" | ads="+(null===g?"null":g.length)),{type:"m3u8",url:u,headers:{Referer:t,"User-Agent":r},ads:g}}catch(e){return null}}async function makeStreamM3U8Result(e,t){if(shouldDetectAdsOnServer(e)){console.log("[KENG][common] PA CDN detected, resolving variant: "+e);var n=await resolveAdsVariant(e,t);if(n)return n;console.log("[KENG][common] PA resolve failed, fallback to original URL")}return{type:"m3u8",url:e,headers:{Referer:t,"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"}}}async function railGroupChinese(e){const t=e;async function n(e){const t=Date.now();console.log("[KENG][Motchill] fetching: "+e);const n=await fetch(e);if(!n.ok)throw new Error("Fetch failed "+n.status+": "+e);const r=await n.text();return console.log("[KENG][Motchill] fetched: "+e+" ("+(Date.now()-t)+"ms, "+r.length+"B)"),r}function r(e){return e.replace(/&quot;/g,'"').replace(/&amp;/g,"&").replace(/&#039;/g,"'").trim()}try{const e=Date.now();console.log("[KENG][10-12][Motchill] railGroupChinese() start");const i=function(e,n){const i=e.split('<li class="item'),l=[];for(let e=1;e<i.length&&l.length<20;e++){const o=i[e],s=o.indexOf("</li>"),a=s>=0?o.substring(0,s):o.substring(0,2e3),c=a.match(/href="(https?:\/\/[^"]+\/phim\/([^"/?]+))"/),u=a.match(/data-original="(\/storage\/[^"]+)"/),g=a.match(/class="label[^"]*"[^>]*>([^<]+)</);if(!c)continue;const h=a.match(/class="name"[\s\S]*?title="([^"]+)"/),f=h?r(h[1]):"";if(!f)continue;const m=g?g[1].trim():"";if(/trailer/i.test(m)||/trailer/i.test(f))continue;const d=f.match(/\b(20\d{2})\s*$/),p=d?d[1]:"",v=d?f.slice(0,-p.length).trim():f,y=m,N="";l.push({rank:0,title:v,title_original:"",poster_url:u?t+u[1]:"",url:c[1],media_type:n,badge_text:y,badge_sub:N,year:p,rating:"",synopsis:"",age_rating:"",episode_current:y,genres:[],slug:c[2]})}return l}(await n(t+"/quoc-gia/trung-quoc"),"series"),l=i.filter(e=>!e.poster_url);if(l.length>0){console.log("[KENG][10-12][Motchill] chinese: fetching "+l.length+" missing posters");(await Promise.allSettled(l.map(e=>n(e.url)))).forEach((e,t)=>{"fulfilled"===e.status&&(l[t].poster_url=function(e){const t=e.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/);return t?t[1]:""}(e.value))})}const o=i.map(({slug:e,...t})=>t);if(0===o.length)throw new Error("No items parsed from /quoc-gia/trung-quoc");return console.log("[KENG][10-12][Motchill] railGroupChinese() SUCCESS: "+o.length+" items, total="+(Date.now()-e)+"ms"),JSON.stringify([{id:"chinese",title:"Phim Trung Quốc Mới",subtitle:null,card_height_percent:.18,card_size_ratio:.667,is_hero_source:!1,show_rank:!1,movies:o,show_cta:{js_method:"getAllChinese"}}])}catch(e){return console.log("[KENG][10-12][Motchill] ERROR railGroupChinese: "+e.message),JSON.stringify({error:e.message})}}async function getAllChinese(e,t=1){const n=e;async function r(e){const t=await fetch(e);if(!t.ok)throw new Error("Fetch failed "+t.status+": "+e);return t.text()}try{console.log("[KENG][5-7a][Motchill] getAllChinese(page="+t+")");const e=n+"/quoc-gia/trung-quoc?page="+t,i=function(e){const t=e.split('<li class="item'),r=[];for(let e=1;e<t.length;e++){const i=t[e],l=i.indexOf("</li>"),o=l>=0?i.substring(0,l):i.substring(0,2e3),s=o.match(/href="(https?:\/\/[^"]+\/phim\/([^"\/?]+))"/),a=o.match(/data-original="(\/storage\/[^"]+)"/),c=o.match(/class="label[^"]*"[^>]*>([^<]+)</);if(!s)continue;const u=o.match(/class="name"[\s\S]*?title="([^"]+)"/),g=u?u[1].replace(/&quot;/g,'"').replace(/&amp;/g,"&").replace(/&#039;/g,"'"):"";if(!g)continue;const h=g.match(/\b(20\d{2})\s*$/),f=h?h[1]:"",m=h?g.slice(0,-f.length).trim():g,d=c?c[1].trim():"";if(d.toLowerCase().includes("trailer"))continue;const p=d,v="";r.push({rank:0,title:m,title_original:"",poster_url:a?n+a[1]:"",url:s[1],media_type:"series",badge_text:p,badge_sub:v,year:f,rating:"",synopsis:"",age_rating:"",episode_current:p,genres:[],slug:s[2]})}return r}(await r(e));if(0===i.length)return console.log("[KENG][5-7a][Motchill] getAllChinese() END — no more items"),JSON.stringify([]);const l=i.filter(e=>!e.poster_url);if(l.length>0){(await Promise.allSettled(l.map(e=>r(e.url)))).forEach((e,t)=>{"fulfilled"===e.status&&(l[t].poster_url=function(e){const t=e.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/);return t?t[1]:""}(e.value))})}const o=i.map(({slug:e,...t})=>t);return console.log("[KENG][5-7a][Motchill] getAllChinese() SUCCESS: "+o.length+" items"),JSON.stringify(o)}catch(e){return console.log("[KENG][5-7a][Motchill] getAllChinese() ERROR: "+e.message),JSON.stringify({error:e.message})}}
+/**
+ * Keng Common JS — shared utilities injected before each provider's resolver.
+ * Keep this file self-contained; it will be prepended to provider JS at deploy time.
+ *
+ * Contract: all functions are available in provider resolvers via normal JS scoping.
+ */
+
+// ── HLS Ad Detection ────────────────────────────────────────────────────────
+// Parse HLS variant playlist for SSAI ad segments.
+// Detects ad patterns in HLS segment URLs:
+//   - /adjump/ URLs
+//   - /vN/ prefix with segment_XXX.ts (numbered SSAI ad segments, any version)
+//
+// NOTE: every clause must evaluate to a boolean. Never compare a .test() result
+// against -1 — `-1 !== false` is true, which classifies every segment as an ad
+// and makes the whole movie look like one giant ad break.
+//
+// `convertvN/` was removed 2026-08-15: it is a FALSE POSITIVE. On
+// s5.phim1280.tv those segments carry the same random 8-char names as the
+// content around them, sit in a playlist with zero /adjump/ segments, and were
+// confirmed on-device to be ordinary film — they are re-transcoded segments,
+// and the #EXT-X-DISCONTINUITY around them marks an encoder change, not an ad
+// break. Flagging them cut ~25s of real movie out of a single title.
+//
+// Bias: a false positive removes film the user paid attention to; a false
+// negative merely shows an ad. Prefer missing an ad over cutting content.
+function _isAdSegment(segment) {
+  return segment.indexOf('/adjump/') !== -1
+      || /^\/v\d+\/.*segment_/.test(segment);
+}
+
+function parseAdsFromPlaylist(playlistText) {
+  var ads = [];
+  var lines = playlistText.split('\n');
+  var cumulative = 0.0;
+  var adStart = null;
+
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (line.indexOf('#EXTINF:') !== 0) continue;
+
+    var match = line.match(/#EXTINF:([\d.]+)/);
+    if (!match) continue;
+    var duration = parseFloat(match[1]);
+    if (isNaN(duration)) continue;
+
+    var segment = (lines[i + 1] || '').trim();
+
+    if (_isAdSegment(segment)) {
+      if (adStart === null) adStart = cumulative;
+    } else {
+      if (adStart !== null) {
+        ads.push({
+          start: Math.round(adStart * 100) / 100,
+          end: Math.round(cumulative * 100) / 100,
+          duration: Math.round((cumulative - adStart) * 100) / 100,
+        });
+        adStart = null;
+      }
+    }
+    cumulative += duration;
+  }
+
+  if (adStart !== null) {
+    ads.push({
+      start: Math.round(adStart * 100) / 100,
+      end: Math.round(cumulative * 100) / 100,
+      duration: Math.round((cumulative - adStart) * 100) / 100,
+    });
+  }
+
+  return ads;
+}
+
+// Total playable duration of a playlist, in seconds.
+function _playlistTotalDuration(playlistText) {
+  var lines = playlistText.split('\n');
+  var total = 0.0;
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (line.indexOf('#EXTINF:') !== 0) continue;
+    var match = line.match(/#EXTINF:([\d.]+)/);
+    if (!match) continue;
+    var d = parseFloat(match[1]);
+    if (!isNaN(d)) total += d;
+  }
+  return Math.round(total * 100) / 100;
+}
+
+// Sanity-checked ad detection.
+// Returns an array of ad zones, or null when the result looks bogus — a
+// mis-classifying detector would otherwise report the entire movie as one ad
+// zone and the player would seek straight to the end.
+//
+// null means "detection not trustworthy" and is distinct from [] ("no ads"),
+// which the Dart side relies on (see StreamResult.ads).
+function detectAdsSafe(playlistText) {
+  var total = _playlistTotalDuration(playlistText);
+  if (total <= 0) return null;
+
+  var ads = parseAdsFromPlaylist(playlistText);
+  if (ads.length === 0) return [];
+
+  var adTotal = 0.0;
+  for (var i = 0; i < ads.length; i++) adTotal += ads[i].duration;
+
+  // Guard 1 — ads covering (nearly) the whole playlist is a detector failure,
+  // not a real stream.
+  if (adTotal >= total * 0.8) {
+    console.log('[KENG][common] Ads rejected: ' + adTotal + 's of ' + total + 's (>=80%) — treating as detection failure');
+    return null;
+  }
+
+  // Guard 2 — a single zone spanning start to end, same failure shape.
+  if (ads.length === 1 && ads[0].start <= 0.01 && ads[0].end >= total - 0.01) {
+    console.log('[KENG][common] Ads rejected: single zone spans whole playlist');
+    return null;
+  }
+
+  return ads;
+}
+
+function _isMasterPlaylist(playlistText) {
+  return playlistText.indexOf('#EXT-X-STREAM-INF') !== -1;
+}
+
+// Resolve a possibly-relative playlist reference against its base URL.
+// Handles absolute, root-relative, protocol-relative and plain relative paths.
+function _resolveUrl(ref, baseUrl) {
+  try {
+    return new URL(ref, baseUrl).href;
+  } catch (_e) {
+    return ref;
+  }
+}
+
+// First variant URI declared in a master playlist, or '' if none.
+function _firstVariantPath(masterText) {
+  var lines = masterText.split('\n');
+  for (var i = 0; i < lines.length; i++) {
+    if (lines[i].trim().indexOf('#EXT-X-STREAM-INF') !== 0) continue;
+    for (var j = i + 1; j < lines.length; j++) {
+      var t = lines[j].trim();
+      if (!t) continue;
+      if (t.charAt(0) === '#') continue;
+      return t;
+    }
+  }
+  return '';
+}
+
+// PA-class CDN. These are served as a master playlist whose variant URL must be
+// handed to the player directly — established behaviour, keep it.
+// Every other CDN keeps its original URL so the player can still do ABR.
+function _isPaCdn(url) {
+  return url.indexOf('kkphimplayer') !== -1 || url.indexOf('phim1280.tv') !== -1;
+}
+
+function _kengFetchText(url, headers, timeoutMs) {
+  var controller = new AbortController();
+  var timer = setTimeout(function () { controller.abort(); }, timeoutMs);
+  return fetch(url, { headers: headers, signal: controller.signal })
+    .then(function (resp) {
+      clearTimeout(timer);
+      if (!resp.ok) return null;
+      return resp.text();
+    })
+    .catch(function () {
+      clearTimeout(timer);
+      return null;
+    });
+}
+
+// Fetch + resolve m3u8 → ad-annotated stream result.
+// Works on any CDN: detection is driven by playlist content, not by domain.
+// Returns { type, url, headers, ads } or null on failure.
+async function resolveAdsVariant(m3u8Url, referer) {
+  var kengUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+  var origin;
+  try { origin = new URL(m3u8Url).origin; } catch (_e) { origin = ''; }
+
+  var reqHeaders = {
+    'User-Agent': kengUA,
+    'Accept': '*/*',
+    'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Referer': referer || origin + '/',
+    'Origin': origin || '',
+  };
+
+  try {
+    var firstText = await _kengFetchText(m3u8Url, reqHeaders, 2000);
+    if (firstText === null) return null;
+
+    var mediaText = firstText;
+    var variantUrl = m3u8Url;
+
+    if (_isMasterPlaylist(firstText)) {
+      var variantPath = _firstVariantPath(firstText);
+      if (!variantPath) return null;
+      variantUrl = _resolveUrl(variantPath, m3u8Url);
+
+      var variantText = await _kengFetchText(variantUrl, reqHeaders, 2000);
+      if (variantText === null) {
+        // Variant unreachable — still playable, just without ad info.
+        mediaText = '';
+      } else {
+        mediaText = variantText;
+      }
+    }
+    // else: m3u8Url is already a media playlist — parse it directly and never
+    // mistake its first segment (.ts) for a variant URL.
+
+    var ads = mediaText ? detectAdsSafe(mediaText) : null;
+    if (ads && ads.length > 0) {
+      console.log('[KENG][common] Ads detected: ' + JSON.stringify(ads));
+    }
+
+    // PA needs the resolved variant URL; everyone else keeps the original so
+    // the player retains adaptive bitrate across renditions.
+    var outUrl = _isPaCdn(m3u8Url) ? variantUrl : m3u8Url;
+
+    console.log('[KENG][common] Stream resolved: ' + outUrl + ' | ads=' + (ads === null ? 'null' : ads.length));
+    return {
+      type: 'm3u8',
+      url: outUrl,
+      headers: { 'Referer': referer, 'User-Agent': kengUA },
+      ads: ads,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+// Main entry: probe the playlist for SSAI ads → build result.
+// Usage: var result = await makeStreamM3U8Result(m3u8Url, referer);
+async function makeStreamM3U8Result(m3u8Url, referer) {
+  var kengUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+  var result = await resolveAdsVariant(m3u8Url, referer);
+  if (result) return result;
+
+  console.log('[KENG][common] Ad probe failed, falling back to original URL');
+  return {
+    type: 'm3u8',
+    url: m3u8Url,
+    headers: { 'Referer': referer, 'User-Agent': kengUA },
+  };
+}
+
+// ── Provider: motphimchillvl.com ──────────────────────────────────────
+
+// Story 12.12 — Motchill | Rail Group Chinese v3
+// Function: railGroupChinese()
+// Fetches /quoc-gia/trung-quoc → 1 rail: chinese
+// App calls this in parallel with other rail groups
+
+async function railGroupChinese(baseUrl) {
+    const BASE = baseUrl;
+    const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+
+    async function fetchHtml(url) {
+        const t0 = Date.now();
+        console.log('[KENG][Motchill] fetching: ' + url);
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Fetch failed ' + res.status + ': ' + url);
+        const text = await res.text();
+        console.log('[KENG][Motchill] fetched: ' + url + ' (' + (Date.now() - t0) + 'ms, ' + text.length + 'B)');
+        return text;
+    }
+
+    function extractOgImage(html) {
+        const m = html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/);
+        return m ? m[1] : '';
+    }
+
+    function cleanTitle(raw) {
+        return raw.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#039;/g, "'").trim();
+    }
+
+    function parseCountryPage(html, mediaType) {
+        const parts = html.split('<li class="item');
+        const items = [];
+        for (let i = 1; i < parts.length && items.length < 20; i++) {
+            const block = parts[i];
+            const endIdx = block.indexOf('</li>');
+            const liBody = endIdx >= 0 ? block.substring(0, endIdx) : block.substring(0, 2000);
+
+            const hrefM = liBody.match(/href="(https?:\/\/[^"]+\/phim\/([^"/?]+))"/);
+            const imgM = liBody.match(/data-original="(\/storage\/[^"]+)"/);
+            const labelM = liBody.match(/class="label[^"]*"[^>]*>([^<]+)</);
+            if (!hrefM) continue;
+
+            const nameTitleM = liBody.match(/class="name"[\s\S]*?title="([^"]+)"/);
+            const rawTitle = nameTitleM ? cleanTitle(nameTitleM[1]) : '';
+            if (!rawTitle) continue;
+
+            const rawLabel = labelM ? labelM[1].trim() : '';
+            if (/trailer/i.test(rawLabel) || /trailer/i.test(rawTitle)) continue;
+
+            const yearM = rawTitle.match(/\b(20\d{2})\s*$/);
+            const year = yearM ? yearM[1] : '';
+            const title = yearM ? rawTitle.slice(0, -year.length).trim() : rawTitle;
+
+            const badge_text = rawLabel;
+            const badge_sub = '';
+
+            items.push({
+                rank: 0, title, title_original: '',
+                poster_url: imgM ? BASE + imgM[1] : '',
+                url: hrefM[1], media_type: mediaType,
+                badge_text, badge_sub, year, rating: '',
+                synopsis: '', age_rating: '', episode_current: badge_text,
+                genres: [], slug: hrefM[2]
+            });
+        }
+        return items;
+    }
+
+    try {
+        const tStart = Date.now();
+        console.log('[KENG][10-12][Motchill] railGroupChinese() start');
+
+        const html = await fetchHtml(BASE + '/quoc-gia/trung-quoc');
+        const rawItems = parseCountryPage(html, 'series');
+
+        // Fetch missing posters in parallel
+        const misses = rawItems.filter(m => !m.poster_url);
+        if (misses.length > 0) {
+            console.log('[KENG][10-12][Motchill] chinese: fetching ' + misses.length + ' missing posters');
+            const results = await Promise.allSettled(misses.map(m => fetchHtml(m.url)));
+            results.forEach((r, i) => {
+                if (r.status === 'fulfilled') misses[i].poster_url = extractOgImage(r.value);
+            });
+        }
+
+        const movies = rawItems.map(({ slug, ...rest }) => rest);
+        if (movies.length === 0) throw new Error('No items parsed from /quoc-gia/trung-quoc');
+
+        console.log('[KENG][10-12][Motchill] railGroupChinese() SUCCESS: ' + movies.length + ' items, total=' + (Date.now() - tStart) + 'ms');
+
+        return JSON.stringify([
+                {
+                    id: 'chinese',
+                    title: 'Phim Trung Quốc Mới',
+                    subtitle: null,
+                    card_height_percent: 0.18,
+                    card_size_ratio: 0.667,
+                    is_hero_source: false,
+                    show_rank: false,
+                    movies,
+                    show_cta: {
+                        js_method: 'getAllChinese'
+                    }
+                }
+        ]);
+
+    } catch (e) {
+        console.log('[KENG][10-12][Motchill] ERROR railGroupChinese: ' + e.message);
+        return JSON.stringify({ error: e.message });
+    }
+}
+
+async function getAllChinese(baseUrl, page = 1) {
+    const MC_BASE = baseUrl;
+    const MC_UA   = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+
+    async function fetchHtml(url) {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Fetch failed ' + res.status + ': ' + url);
+        return res.text();
+    }
+
+    function extractOgImage(html) {
+        const m = html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/);        return m ? m[1] : '';
+    }
+
+    function parsePage(html) {
+        const liParts = html.split('<li class="item');
+        const movies = [];
+        for (let i = 1; i < liParts.length; i++) {
+            const block = liParts[i];
+            const endIdx = block.indexOf('</li>');
+            const liBody = endIdx >= 0 ? block.substring(0, endIdx) : block.substring(0, 2000);
+            const hrefM  = liBody.match(/href="(https?:\/\/[^"]+\/phim\/([^"\/?]+))"/);            const imgM   = liBody.match(/data-original="(\/storage\/[^"]+)"/);            const labelM = liBody.match(/class="label[^"]*"[^>]*>([^<]+)</);            if (!hrefM) continue;
+            const nameTitleM = liBody.match(/class="name"[\s\S]*?title="([^"]+)"/);            const rawTitle = nameTitleM
+                ? nameTitleM[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#039;/g, "'")
+                : '';
+            if (!rawTitle) continue;
+            const yearM = rawTitle.match(/\b(20\d{2})\s*$/);
+            const year  = yearM ? yearM[1] : '';
+            const title = yearM ? rawTitle.slice(0, -year.length).trim() : rawTitle;
+            const label      = labelM ? labelM[1].trim() : '';
+            if (label.toLowerCase().includes('trailer')) continue;
+            const badge_text = label;
+            const badge_sub  = '';
+            movies.push({
+                rank: 0, title, title_original: '',
+                poster_url: imgM ? MC_BASE + imgM[1] : '',
+                url: hrefM[1], media_type: 'series', badge_text, badge_sub,
+                year, rating: '', synopsis: '', age_rating: '',
+                episode_current: badge_text, genres: [], slug: hrefM[2]
+            });
+        }
+        return movies;
+    }
+
+    try {
+        console.log('[KENG][5-7a][Motchill] getAllChinese(page=' + page + ')');
+        const url = MC_BASE + '/quoc-gia/trung-quoc?page=' + page;
+        const html = await fetchHtml(url);
+        const movies = parsePage(html);
+        if (movies.length === 0) {
+            console.log('[KENG][5-7a][Motchill] getAllChinese() END — no more items');
+            return JSON.stringify([]);
+        }
+        const misses = movies.filter(m => !m.poster_url);
+        if (misses.length > 0) {
+            const results = await Promise.allSettled(misses.map(m => fetchHtml(m.url)));
+            results.forEach((r, i) => {
+                if (r.status === 'fulfilled') misses[i].poster_url = extractOgImage(r.value);
+            });
+        }
+        const output = movies.map(({ slug, ...rest }) => rest);
+        console.log('[KENG][5-7a][Motchill] getAllChinese() SUCCESS: ' + output.length + ' items');
+        return JSON.stringify(output);
+    } catch (e) {
+        console.log('[KENG][5-7a][Motchill] getAllChinese() ERROR: ' + e.message);
+        return JSON.stringify({ error: e.message });
+    }
+}
