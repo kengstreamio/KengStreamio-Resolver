@@ -1,1 +1,371 @@
-function _isAdSegment(e){return-1!==e.indexOf("/adjump/")||/convertv\d+\//.test(e)||/^\/v\d+\/.*segment_/.test(e)}function parseAdsFromPlaylist(e){for(var t=[],r=e.split("\n"),n=0,a=null,s=0;s<r.length;s++){var i=r[s].trim();if(0===i.indexOf("#EXTINF:")){var l=i.match(/#EXTINF:([\d.]+)/);if(l){var o=parseFloat(l[1]);if(!isNaN(o))_isAdSegment((r[s+1]||"").trim())?null===a&&(a=n):null!==a&&(t.push({start:Math.round(100*a)/100,end:Math.round(100*n)/100,duration:Math.round(100*(n-a))/100}),a=null),n+=o}}}return null!==a&&t.push({start:Math.round(100*a)/100,end:Math.round(100*n)/100,duration:Math.round(100*(n-a))/100}),t}function shouldDetectAdsOnServer(e){return-1!==e.indexOf("kkphimplayer")||-1!==e.indexOf("phim1280.tv")}async function resolveAdsVariant(e,t){var r,n="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";try{r=new URL(e).origin}catch(e){r=""}var a={headers:{"User-Agent":n,Accept:"*/*","Accept-Language":"vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",Referer:t||r+"/",Origin:r||""}};try{var s=await fetch(e,a);if(!s.ok)return null;for(var i=(await s.text()).split("\n"),l="",o=0;o<i.length;o++){var c=i[o].trim();if(c&&"#"!==c.charAt(0)){l=c;break}}if(!l)return null;var u=l;if("h"!==l.charAt(0))u=e.substring(0,e.lastIndexOf("/")+1)+l;var d=null;try{var p=new AbortController,f=setTimeout(function(){p.abort()},2e3),m=await fetch(u,{headers:a.headers,signal:p.signal});if(clearTimeout(f),m.ok){var h=parseAdsFromPlaylist(await m.text());h.length>0&&(d=h,console.log("[KENG][common] Ads detected: "+JSON.stringify(d)))}}catch(e){}return console.log("[KENG][common] PA resolved: "+u+" | ads="+(null===d?"null":d.length)),{type:"m3u8",url:u,headers:{Referer:t,"User-Agent":n},ads:d}}catch(e){return null}}async function makeStreamM3U8Result(e,t){if(shouldDetectAdsOnServer(e)){console.log("[KENG][common] PA CDN detected, resolving variant: "+e);var r=await resolveAdsVariant(e,t);if(r)return r;console.log("[KENG][common] PA resolve failed, fallback to original URL")}return{type:"m3u8",url:e,headers:{Referer:t,"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"}}}async function getStreamUrl(e){const t="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";function r(e){try{console.log("[KENG][anime-1][getStreamUrl] "+e)}catch(e){}}try{if(r("episode="+e),/\.m3u8(\?|$)/.test(e)){const t=await makeStreamM3U8Result(e,"");return r("Direct m3u8, ads="+(null===t.ads?"null":t.ads?t.ads.length:0)),JSON.stringify(t)}const n=function(e){try{const t=new URL(e),r=t.protocol+"//"+t.host,n=t.pathname.match(/\/(tap-\d+)-sv(\d+)\.html$/);return n?{baseUrl:r,episodeSlug:n[1],serverId:n[2]}:null}catch(e){return null}}(e);if(!n)return JSON.stringify({error:"Cannot parse episodeUrl: "+e});const a=await fetch(e,{headers:{"User-Agent":t,Accept:"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",Referer:n.baseUrl+"/","X-Requested-With":"XMLHttpRequest"}});if(!a.ok)return JSON.stringify({error:"Watch page HTTP "+a.status+": "+e});const s=function(e){const t=(new DOMParser).parseFromString(e,"text/html").querySelectorAll("script");for(const e of t){const t=e.textContent||"";if(!/halim_cfg\s*=/.test(t))continue;const r=t.match(/"post_id"\s*:\s*"?(\d+)"?/),n=t.match(/"player_url"\s*:\s*"([^"]+)"/);if(r&&n)return{postId:r[1],playerUrl:n[1].replace(/\\\//g,"/")}}return null}(await a.text());if(!s)return JSON.stringify({error:"halim_cfg.post_id / player_url not found in watch HTML"});r("post_id="+s.postId+" player_url="+s.playerUrl);const i=s.playerUrl+"?episode_slug="+encodeURIComponent(n.episodeSlug)+"&server_id="+encodeURIComponent(n.serverId)+"&subsv_id=&post_id="+encodeURIComponent(s.postId),l=await fetch(i,{headers:{"User-Agent":t,Accept:"application/json,text/javascript,*/*;q=0.8",Referer:e,"X-Requested-With":"XMLHttpRequest"}});if(!l.ok)return JSON.stringify({error:"player.php HTTP "+l.status+": "+i});const o=await l.json();if(o&&!1===o.status){const e=o.message||"player.php status:false (code="+(o.code||"n/a")+")";return JSON.stringify({error:e})}if(!o||!o.file)return JSON.stringify({error:'player.php response missing "file" field'});const c=String(o.file).replace(/\\\//g,"/");r("m3u8="+c+" label="+(o.label||"")+" type="+(o.type||""));const u=e,d=await makeStreamM3U8Result(c,u);return r("Stream result: ads="+(null===d.ads?"null":d.ads?d.ads.length:0)),JSON.stringify(d)}catch(e){return r("error: "+(e&&e.message?e.message:e)),JSON.stringify({error:e&&e.message?e.message:String(e)})}}
+/**
+ * Keng Common JS — shared utilities injected before each provider's resolver.
+ * Keep this file self-contained; it will be prepended to provider JS at deploy time.
+ *
+ * Contract: all functions are available in provider resolvers via normal JS scoping.
+ */
+
+// ── HLS Ad Detection ────────────────────────────────────────────────────────
+// Parse HLS variant playlist for SSAI ad segments.
+// Detects ad patterns in HLS segment URLs:
+//   - /adjump/ URLs
+//   - convertvN/ prefix segments (convertv7/, convertv8/, convertv9/, ...)
+//   - /vN/ prefix with segment_XXX.ts (numbered SSAI ad segments, any version)
+//
+// NOTE: every clause must evaluate to a boolean. Never compare a .test() result
+// against -1 — `-1 !== false` is true, which classifies every segment as an ad
+// and makes the whole movie look like one giant ad break.
+function _isAdSegment(segment) {
+  return segment.indexOf('/adjump/') !== -1
+      || /convertv\d+\//.test(segment)
+      || /^\/v\d+\/.*segment_/.test(segment);
+}
+
+function parseAdsFromPlaylist(playlistText) {
+  var ads = [];
+  var lines = playlistText.split('\n');
+  var cumulative = 0.0;
+  var adStart = null;
+
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (line.indexOf('#EXTINF:') !== 0) continue;
+
+    var match = line.match(/#EXTINF:([\d.]+)/);
+    if (!match) continue;
+    var duration = parseFloat(match[1]);
+    if (isNaN(duration)) continue;
+
+    var segment = (lines[i + 1] || '').trim();
+
+    if (_isAdSegment(segment)) {
+      if (adStart === null) adStart = cumulative;
+    } else {
+      if (adStart !== null) {
+        ads.push({
+          start: Math.round(adStart * 100) / 100,
+          end: Math.round(cumulative * 100) / 100,
+          duration: Math.round((cumulative - adStart) * 100) / 100,
+        });
+        adStart = null;
+      }
+    }
+    cumulative += duration;
+  }
+
+  if (adStart !== null) {
+    ads.push({
+      start: Math.round(adStart * 100) / 100,
+      end: Math.round(cumulative * 100) / 100,
+      duration: Math.round((cumulative - adStart) * 100) / 100,
+    });
+  }
+
+  return ads;
+}
+
+// Total playable duration of a playlist, in seconds.
+function _playlistTotalDuration(playlistText) {
+  var lines = playlistText.split('\n');
+  var total = 0.0;
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (line.indexOf('#EXTINF:') !== 0) continue;
+    var match = line.match(/#EXTINF:([\d.]+)/);
+    if (!match) continue;
+    var d = parseFloat(match[1]);
+    if (!isNaN(d)) total += d;
+  }
+  return Math.round(total * 100) / 100;
+}
+
+// Sanity-checked ad detection.
+// Returns an array of ad zones, or null when the result looks bogus — a
+// mis-classifying detector would otherwise report the entire movie as one ad
+// zone and the player would seek straight to the end.
+//
+// null means "detection not trustworthy" and is distinct from [] ("no ads"),
+// which the Dart side relies on (see StreamResult.ads).
+function detectAdsSafe(playlistText) {
+  var total = _playlistTotalDuration(playlistText);
+  if (total <= 0) return null;
+
+  var ads = parseAdsFromPlaylist(playlistText);
+  if (ads.length === 0) return [];
+
+  var adTotal = 0.0;
+  for (var i = 0; i < ads.length; i++) adTotal += ads[i].duration;
+
+  // Guard 1 — ads covering (nearly) the whole playlist is a detector failure,
+  // not a real stream.
+  if (adTotal >= total * 0.8) {
+    console.log('[KENG][common] Ads rejected: ' + adTotal + 's of ' + total + 's (>=80%) — treating as detection failure');
+    return null;
+  }
+
+  // Guard 2 — a single zone spanning start to end, same failure shape.
+  if (ads.length === 1 && ads[0].start <= 0.01 && ads[0].end >= total - 0.01) {
+    console.log('[KENG][common] Ads rejected: single zone spans whole playlist');
+    return null;
+  }
+
+  return ads;
+}
+
+function _isMasterPlaylist(playlistText) {
+  return playlistText.indexOf('#EXT-X-STREAM-INF') !== -1;
+}
+
+// Resolve a possibly-relative playlist reference against its base URL.
+// Handles absolute, root-relative, protocol-relative and plain relative paths.
+function _resolveUrl(ref, baseUrl) {
+  try {
+    return new URL(ref, baseUrl).href;
+  } catch (_e) {
+    return ref;
+  }
+}
+
+// First variant URI declared in a master playlist, or '' if none.
+function _firstVariantPath(masterText) {
+  var lines = masterText.split('\n');
+  for (var i = 0; i < lines.length; i++) {
+    if (lines[i].trim().indexOf('#EXT-X-STREAM-INF') !== 0) continue;
+    for (var j = i + 1; j < lines.length; j++) {
+      var t = lines[j].trim();
+      if (!t) continue;
+      if (t.charAt(0) === '#') continue;
+      return t;
+    }
+  }
+  return '';
+}
+
+// PA-class CDN. These are served as a master playlist whose variant URL must be
+// handed to the player directly — established behaviour, keep it.
+// Every other CDN keeps its original URL so the player can still do ABR.
+function _isPaCdn(url) {
+  return url.indexOf('kkphimplayer') !== -1 || url.indexOf('phim1280.tv') !== -1;
+}
+
+function _kengFetchText(url, headers, timeoutMs) {
+  var controller = new AbortController();
+  var timer = setTimeout(function () { controller.abort(); }, timeoutMs);
+  return fetch(url, { headers: headers, signal: controller.signal })
+    .then(function (resp) {
+      clearTimeout(timer);
+      if (!resp.ok) return null;
+      return resp.text();
+    })
+    .catch(function () {
+      clearTimeout(timer);
+      return null;
+    });
+}
+
+// Fetch + resolve m3u8 → ad-annotated stream result.
+// Works on any CDN: detection is driven by playlist content, not by domain.
+// Returns { type, url, headers, ads } or null on failure.
+async function resolveAdsVariant(m3u8Url, referer) {
+  var kengUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+  var origin;
+  try { origin = new URL(m3u8Url).origin; } catch (_e) { origin = ''; }
+
+  var reqHeaders = {
+    'User-Agent': kengUA,
+    'Accept': '*/*',
+    'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Referer': referer || origin + '/',
+    'Origin': origin || '',
+  };
+
+  try {
+    var firstText = await _kengFetchText(m3u8Url, reqHeaders, 2000);
+    if (firstText === null) return null;
+
+    var mediaText = firstText;
+    var variantUrl = m3u8Url;
+
+    if (_isMasterPlaylist(firstText)) {
+      var variantPath = _firstVariantPath(firstText);
+      if (!variantPath) return null;
+      variantUrl = _resolveUrl(variantPath, m3u8Url);
+
+      var variantText = await _kengFetchText(variantUrl, reqHeaders, 2000);
+      if (variantText === null) {
+        // Variant unreachable — still playable, just without ad info.
+        mediaText = '';
+      } else {
+        mediaText = variantText;
+      }
+    }
+    // else: m3u8Url is already a media playlist — parse it directly and never
+    // mistake its first segment (.ts) for a variant URL.
+
+    var ads = mediaText ? detectAdsSafe(mediaText) : null;
+    if (ads && ads.length > 0) {
+      console.log('[KENG][common] Ads detected: ' + JSON.stringify(ads));
+    }
+
+    // PA needs the resolved variant URL; everyone else keeps the original so
+    // the player retains adaptive bitrate across renditions.
+    var outUrl = _isPaCdn(m3u8Url) ? variantUrl : m3u8Url;
+
+    console.log('[KENG][common] Stream resolved: ' + outUrl + ' | ads=' + (ads === null ? 'null' : ads.length));
+    return {
+      type: 'm3u8',
+      url: outUrl,
+      headers: { 'Referer': referer, 'User-Agent': kengUA },
+      ads: ads,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+// Main entry: probe the playlist for SSAI ads → build result.
+// Usage: var result = await makeStreamM3U8Result(m3u8Url, referer);
+async function makeStreamM3U8Result(m3u8Url, referer) {
+  var kengUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+  var result = await resolveAdsVariant(m3u8Url, referer);
+  if (result) return result;
+
+  console.log('[KENG][common] Ad probe failed, falling back to original URL');
+  return {
+    type: 'm3u8',
+    url: m3u8Url,
+    headers: { 'Referer': referer, 'User-Agent': kengUA },
+  };
+}
+
+// ── Provider: anime-1 ──────────────────────────────────────
+
+// Provider: anime-1
+// Standalone: Stream URL resolver
+// Function: getStreamUrl(episodeUrl) -> JSON string of stream object
+// Episode URL:  {baseUrl}/xem-phim-<slug>/tap-N-svS.html
+// Resolver: fetch watch HTML → extract post_id + player_url from halim_cfg
+//           → GET player.php?episode_slug&server_id&subsv_id&post_id
+//           → return { type: "m3u8", url, headers } or { error }
+// v6.1 contract: no top-level declarations.
+
+
+async function getStreamUrl(episodeUrl) {
+  const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+  function log(msg) {
+    try { console.log('[KENG][anime-1][getStreamUrl] ' + msg); } catch (_e) {}
+  }
+
+  function parseEpisode(episodeUrl) {
+    // Expected: {baseUrl}/xem-phim-<slug>/tap-N-svS.html
+    // → baseUrl={baseUrl}, episodeSlug="tap-N", serverId="S"
+    try {
+      const u = new URL(episodeUrl);
+      const baseUrl = u.protocol + '//' + u.host;
+      const m = u.pathname.match(/\/(tap-\d+)-sv(\d+)\.html$/);
+      if (!m) return null;
+      return { baseUrl, episodeSlug: m[1], serverId: m[2] };
+    } catch (_e) {
+      return null;
+    }
+  }
+
+  function extractHalimCfg(html) {
+    // Walk every <script> tag; find the inline one that defines halim_cfg
+    // and pull out post_id + player_url.
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const scripts = doc.querySelectorAll('script');
+    for (const s of scripts) {
+      const txt = s.textContent || '';
+      if (!/halim_cfg\s*=/.test(txt)) continue;
+      const postM = txt.match(/"post_id"\s*:\s*"?(\d+)"?/);
+      const playerM = txt.match(/"player_url"\s*:\s*"([^"]+)"/);
+      if (postM && playerM) {
+        return {
+          postId: postM[1],
+          playerUrl: playerM[1].replace(/\\\//g, '/'),
+        };
+      }
+    }
+    return null;
+  }
+
+  try {
+    log('episode=' + episodeUrl);
+
+    // If caller already has a direct m3u8 URL, short-circuit
+    if (/\.m3u8(\?|$)/.test(episodeUrl)) {
+      const result = await makeStreamM3U8Result(episodeUrl, '');
+      log('Direct m3u8, ads=' + (result.ads === null ? 'null' : (result.ads ? result.ads.length : 0)));
+      return JSON.stringify(result);
+    }
+
+    const parsed = parseEpisode(episodeUrl);
+    if (!parsed) {
+      return JSON.stringify({ error: 'Cannot parse episodeUrl: ' + episodeUrl });
+    }
+
+    // 1) Fetch the watch page HTML to grab post_id + player_url from halim_cfg
+    const watchResp = await fetch(episodeUrl, {
+      headers: {
+        'User-Agent': UA,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Referer': parsed.baseUrl + '/',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    });
+    if (!watchResp.ok) {
+      return JSON.stringify({ error: 'Watch page HTTP ' + watchResp.status + ': ' + episodeUrl });
+    }
+    const watchHtml = await watchResp.text();
+    const cfg = extractHalimCfg(watchHtml);
+    if (!cfg) {
+      return JSON.stringify({ error: 'halim_cfg.post_id / player_url not found in watch HTML' });
+    }
+    log('post_id=' + cfg.postId + ' player_url=' + cfg.playerUrl);
+
+    // 2) Call player.php with the four params the bundle.js sends
+    const playerUrl =
+      cfg.playerUrl +
+      '?episode_slug=' + encodeURIComponent(parsed.episodeSlug) +
+      '&server_id=' + encodeURIComponent(parsed.serverId) +
+      '&subsv_id=' +
+      '&post_id=' + encodeURIComponent(cfg.postId);
+
+    const playerResp = await fetch(playerUrl, {
+      headers: {
+        'User-Agent': UA,
+        'Accept': 'application/json,text/javascript,*/*;q=0.8',
+        'Referer': episodeUrl,
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    });
+    if (!playerResp.ok) {
+      return JSON.stringify({ error: 'player.php HTTP ' + playerResp.status + ': ' + playerUrl });
+    }
+
+    const data = await playerResp.json();
+
+    // 3) Error paths: VIP (sv2 → 403), or generic status:false
+    if (data && data.status === false) {
+      const msg = data.message || ('player.php status:false (code=' + (data.code || 'n/a') + ')');
+      return JSON.stringify({ error: msg });
+    }
+    if (!data || !data.file) {
+      return JSON.stringify({ error: 'player.php response missing "file" field' });
+    }
+
+    const m3u8Url = String(data.file).replace(/\\\//g, '/');
+    log('m3u8=' + m3u8Url + ' label=' + (data.label || '') + ' type=' + (data.type || ''));
+
+    const referer = episodeUrl;
+    const result = await makeStreamM3U8Result(m3u8Url, referer);
+    log('Stream result: ads=' + (result.ads === null ? 'null' : (result.ads ? result.ads.length : 0)));
+    return JSON.stringify(result);
+
+  } catch (e) {
+    log('error: ' + (e && e.message ? e.message : e));
+    return JSON.stringify({ error: e && e.message ? e.message : String(e) });
+  }
+}

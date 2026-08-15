@@ -1,1 +1,390 @@
-function _isAdSegment(e){return-1!==e.indexOf("/adjump/")||/convertv\d+\//.test(e)||/^\/v\d+\/.*segment_/.test(e)}function parseAdsFromPlaylist(e){for(var t=[],r=e.split("\n"),n=0,a=null,i=0;i<r.length;i++){var o=r[i].trim();if(0===o.indexOf("#EXTINF:")){var s=o.match(/#EXTINF:([\d.]+)/);if(s){var l=parseFloat(s[1]);if(!isNaN(l))_isAdSegment((r[i+1]||"").trim())?null===a&&(a=n):null!==a&&(t.push({start:Math.round(100*a)/100,end:Math.round(100*n)/100,duration:Math.round(100*(n-a))/100}),a=null),n+=l}}}return null!==a&&t.push({start:Math.round(100*a)/100,end:Math.round(100*n)/100,duration:Math.round(100*(n-a))/100}),t}function shouldDetectAdsOnServer(e){return-1!==e.indexOf("kkphimplayer")||-1!==e.indexOf("phim1280.tv")}async function resolveAdsVariant(e,t){var r,n="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";try{r=new URL(e).origin}catch(e){r=""}var a={headers:{"User-Agent":n,Accept:"*/*","Accept-Language":"vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",Referer:t||r+"/",Origin:r||""}};try{var i=await fetch(e,a);if(!i.ok)return null;for(var o=(await i.text()).split("\n"),s="",l=0;l<o.length;l++){var c=o[l].trim();if(c&&"#"!==c.charAt(0)){s=c;break}}if(!s)return null;var u=s;if("h"!==s.charAt(0))u=e.substring(0,e.lastIndexOf("/")+1)+s;var f=null;try{var m=new AbortController,h=setTimeout(function(){m.abort()},2e3),d=await fetch(u,{headers:a.headers,signal:m.signal});if(clearTimeout(h),d.ok){var g=parseAdsFromPlaylist(await d.text());g.length>0&&(f=g,console.log("[KENG][common] Ads detected: "+JSON.stringify(f)))}}catch(e){}return console.log("[KENG][common] PA resolved: "+u+" | ads="+(null===f?"null":f.length)),{type:"m3u8",url:u,headers:{Referer:t,"User-Agent":n},ads:f}}catch(e){return null}}async function makeStreamM3U8Result(e,t){if(shouldDetectAdsOnServer(e)){console.log("[KENG][common] PA CDN detected, resolving variant: "+e);var r=await resolveAdsVariant(e,t);if(r)return r;console.log("[KENG][common] PA resolve failed, fallback to original URL")}return{type:"m3u8",url:e,headers:{Referer:t,"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"}}}function resolveBaseUrl(e){return"string"==typeof e&&/^https?:\/\//i.test(e)?e:"undefined"!=typeof location&&location.origin?location.origin:""}function cleanText(e){return String(e??"").replace(/\s+/g," ").trim()}function stripHtml(e){return cleanText(e).replace(/<[^>]*>/g," ")}function absUrl(e,t){const r=cleanText(t);if(!r)return"";try{return new URL(r,e).href}catch(e){return r}}function imgUrl(e){const t=cleanText(e);if(!t)return"";try{return new URL(t,"https://phim.nguonc.com").href}catch(e){return t}}function inferMediaType(e){const t=cleanText(e&&e.type||"").toLowerCase(),r=(Number.parseInt(e&&e.total_episodes?String(e.total_episodes):"",10),cleanText(e&&e.current_episode||"").toLowerCase());return"movie"===t||"single"===t||/full/.test(r)?"movie":(/tập|episode|phần|hoàn\s*tất/.test(r),"series")}function isTrailer(e){return[e&&e.badge_text,e&&e.current_episode,e&&e.name,e&&e.original_name].map(cleanText).join(" ").toLowerCase().includes("trailer")}function parseGenres(e){const t=e&&e.category;if(!t||"object"!=typeof t||Array.isArray(t))return[];const r=[];return Object.values(t).forEach(e=>{const t=cleanText(e&&e.group&&e.group.name?e.group.name:"");if(t&&!/thể loại/i.test(t))return;(Array.isArray(e&&e.list)?e.list:[]).forEach(e=>{const t=cleanText(e&&e.name?e.name:"");t&&r.push(t)})}),[...new Set(r)]}function normalizeMovieItem(e,t){const r=cleanText(t.thumb_url||t.poster_url||""),n=cleanText(t.poster_url||t.thumb_url||""),a=cleanText(t.name||""),i=cleanText(t.slug||""),o=cleanText(t.current_episode||""),s=cleanText(t.quality||""),l=cleanText(t.language||"");return{rank:0,title:a,title_original:cleanText(t.original_name||""),poster_url:imgUrl(r||n),thumbnail_url:imgUrl(n||r),url:i?absUrl(e,`/film/${encodeURIComponent(i)}`):"",media_type:inferMediaType(t),badge_text:o||s,badge_sub:l,year:cleanText(t.year||""),rating:cleanText(t.rating||""),synopsis:stripHtml(t.description||""),age_rating:cleanText(t.age_rating||""),episode_current:o,genres:parseGenres(t)}}async function fetchJson(e){const t=await fetch(e,{headers:{"User-Agent":"Mozilla/5.0",Referer:"https://phim.nguonc.com"}});if(!t.ok)throw new Error("Fetch failed: "+t.status);return await t.json()}async function fetchItems(e,t=1){const r=resolveBaseUrl(e),n=new URL("/api/films/danh-sach/phim-le",r);n.searchParams.set("page",String(Number.parseInt(t||"1",10)||1));const a=await fetchJson(n.href);return(Array.isArray(a&&a.items)?a.items:[]).filter(e=>e&&!isTrailer(e)).map(e=>normalizeMovieItem(r,e)).filter(e=>e.title&&e.url)}async function railGroupPhimLe(e){try{const t=await fetchItems(e,1);return JSON.stringify([{id:"phim_le",title:"Phim Lẻ",subtitle:null,card_height_percent:.18,card_size_ratio:.667,is_hero_source:!1,show_rank:!1,movies:t,show_cta:{js_method:"getAllPhimLe"}}])}catch(e){return JSON.stringify({error:e.message})}}async function getAllPhimLe(e,t=1){try{const r=await fetchItems(e,t);return JSON.stringify(r)}catch(e){return JSON.stringify({error:e.message})}}
+/**
+ * Keng Common JS — shared utilities injected before each provider's resolver.
+ * Keep this file self-contained; it will be prepended to provider JS at deploy time.
+ *
+ * Contract: all functions are available in provider resolvers via normal JS scoping.
+ */
+
+// ── HLS Ad Detection ────────────────────────────────────────────────────────
+// Parse HLS variant playlist for SSAI ad segments.
+// Detects ad patterns in HLS segment URLs:
+//   - /adjump/ URLs
+//   - convertvN/ prefix segments (convertv7/, convertv8/, convertv9/, ...)
+//   - /vN/ prefix with segment_XXX.ts (numbered SSAI ad segments, any version)
+//
+// NOTE: every clause must evaluate to a boolean. Never compare a .test() result
+// against -1 — `-1 !== false` is true, which classifies every segment as an ad
+// and makes the whole movie look like one giant ad break.
+function _isAdSegment(segment) {
+  return segment.indexOf('/adjump/') !== -1
+      || /convertv\d+\//.test(segment)
+      || /^\/v\d+\/.*segment_/.test(segment);
+}
+
+function parseAdsFromPlaylist(playlistText) {
+  var ads = [];
+  var lines = playlistText.split('\n');
+  var cumulative = 0.0;
+  var adStart = null;
+
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (line.indexOf('#EXTINF:') !== 0) continue;
+
+    var match = line.match(/#EXTINF:([\d.]+)/);
+    if (!match) continue;
+    var duration = parseFloat(match[1]);
+    if (isNaN(duration)) continue;
+
+    var segment = (lines[i + 1] || '').trim();
+
+    if (_isAdSegment(segment)) {
+      if (adStart === null) adStart = cumulative;
+    } else {
+      if (adStart !== null) {
+        ads.push({
+          start: Math.round(adStart * 100) / 100,
+          end: Math.round(cumulative * 100) / 100,
+          duration: Math.round((cumulative - adStart) * 100) / 100,
+        });
+        adStart = null;
+      }
+    }
+    cumulative += duration;
+  }
+
+  if (adStart !== null) {
+    ads.push({
+      start: Math.round(adStart * 100) / 100,
+      end: Math.round(cumulative * 100) / 100,
+      duration: Math.round((cumulative - adStart) * 100) / 100,
+    });
+  }
+
+  return ads;
+}
+
+// Total playable duration of a playlist, in seconds.
+function _playlistTotalDuration(playlistText) {
+  var lines = playlistText.split('\n');
+  var total = 0.0;
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (line.indexOf('#EXTINF:') !== 0) continue;
+    var match = line.match(/#EXTINF:([\d.]+)/);
+    if (!match) continue;
+    var d = parseFloat(match[1]);
+    if (!isNaN(d)) total += d;
+  }
+  return Math.round(total * 100) / 100;
+}
+
+// Sanity-checked ad detection.
+// Returns an array of ad zones, or null when the result looks bogus — a
+// mis-classifying detector would otherwise report the entire movie as one ad
+// zone and the player would seek straight to the end.
+//
+// null means "detection not trustworthy" and is distinct from [] ("no ads"),
+// which the Dart side relies on (see StreamResult.ads).
+function detectAdsSafe(playlistText) {
+  var total = _playlistTotalDuration(playlistText);
+  if (total <= 0) return null;
+
+  var ads = parseAdsFromPlaylist(playlistText);
+  if (ads.length === 0) return [];
+
+  var adTotal = 0.0;
+  for (var i = 0; i < ads.length; i++) adTotal += ads[i].duration;
+
+  // Guard 1 — ads covering (nearly) the whole playlist is a detector failure,
+  // not a real stream.
+  if (adTotal >= total * 0.8) {
+    console.log('[KENG][common] Ads rejected: ' + adTotal + 's of ' + total + 's (>=80%) — treating as detection failure');
+    return null;
+  }
+
+  // Guard 2 — a single zone spanning start to end, same failure shape.
+  if (ads.length === 1 && ads[0].start <= 0.01 && ads[0].end >= total - 0.01) {
+    console.log('[KENG][common] Ads rejected: single zone spans whole playlist');
+    return null;
+  }
+
+  return ads;
+}
+
+function _isMasterPlaylist(playlistText) {
+  return playlistText.indexOf('#EXT-X-STREAM-INF') !== -1;
+}
+
+// Resolve a possibly-relative playlist reference against its base URL.
+// Handles absolute, root-relative, protocol-relative and plain relative paths.
+function _resolveUrl(ref, baseUrl) {
+  try {
+    return new URL(ref, baseUrl).href;
+  } catch (_e) {
+    return ref;
+  }
+}
+
+// First variant URI declared in a master playlist, or '' if none.
+function _firstVariantPath(masterText) {
+  var lines = masterText.split('\n');
+  for (var i = 0; i < lines.length; i++) {
+    if (lines[i].trim().indexOf('#EXT-X-STREAM-INF') !== 0) continue;
+    for (var j = i + 1; j < lines.length; j++) {
+      var t = lines[j].trim();
+      if (!t) continue;
+      if (t.charAt(0) === '#') continue;
+      return t;
+    }
+  }
+  return '';
+}
+
+// PA-class CDN. These are served as a master playlist whose variant URL must be
+// handed to the player directly — established behaviour, keep it.
+// Every other CDN keeps its original URL so the player can still do ABR.
+function _isPaCdn(url) {
+  return url.indexOf('kkphimplayer') !== -1 || url.indexOf('phim1280.tv') !== -1;
+}
+
+function _kengFetchText(url, headers, timeoutMs) {
+  var controller = new AbortController();
+  var timer = setTimeout(function () { controller.abort(); }, timeoutMs);
+  return fetch(url, { headers: headers, signal: controller.signal })
+    .then(function (resp) {
+      clearTimeout(timer);
+      if (!resp.ok) return null;
+      return resp.text();
+    })
+    .catch(function () {
+      clearTimeout(timer);
+      return null;
+    });
+}
+
+// Fetch + resolve m3u8 → ad-annotated stream result.
+// Works on any CDN: detection is driven by playlist content, not by domain.
+// Returns { type, url, headers, ads } or null on failure.
+async function resolveAdsVariant(m3u8Url, referer) {
+  var kengUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+  var origin;
+  try { origin = new URL(m3u8Url).origin; } catch (_e) { origin = ''; }
+
+  var reqHeaders = {
+    'User-Agent': kengUA,
+    'Accept': '*/*',
+    'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Referer': referer || origin + '/',
+    'Origin': origin || '',
+  };
+
+  try {
+    var firstText = await _kengFetchText(m3u8Url, reqHeaders, 2000);
+    if (firstText === null) return null;
+
+    var mediaText = firstText;
+    var variantUrl = m3u8Url;
+
+    if (_isMasterPlaylist(firstText)) {
+      var variantPath = _firstVariantPath(firstText);
+      if (!variantPath) return null;
+      variantUrl = _resolveUrl(variantPath, m3u8Url);
+
+      var variantText = await _kengFetchText(variantUrl, reqHeaders, 2000);
+      if (variantText === null) {
+        // Variant unreachable — still playable, just without ad info.
+        mediaText = '';
+      } else {
+        mediaText = variantText;
+      }
+    }
+    // else: m3u8Url is already a media playlist — parse it directly and never
+    // mistake its first segment (.ts) for a variant URL.
+
+    var ads = mediaText ? detectAdsSafe(mediaText) : null;
+    if (ads && ads.length > 0) {
+      console.log('[KENG][common] Ads detected: ' + JSON.stringify(ads));
+    }
+
+    // PA needs the resolved variant URL; everyone else keeps the original so
+    // the player retains adaptive bitrate across renditions.
+    var outUrl = _isPaCdn(m3u8Url) ? variantUrl : m3u8Url;
+
+    console.log('[KENG][common] Stream resolved: ' + outUrl + ' | ads=' + (ads === null ? 'null' : ads.length));
+    return {
+      type: 'm3u8',
+      url: outUrl,
+      headers: { 'Referer': referer, 'User-Agent': kengUA },
+      ads: ads,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+// Main entry: probe the playlist for SSAI ads → build result.
+// Usage: var result = await makeStreamM3U8Result(m3u8Url, referer);
+async function makeStreamM3U8Result(m3u8Url, referer) {
+  var kengUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+  var result = await resolveAdsVariant(m3u8Url, referer);
+  if (result) return result;
+
+  console.log('[KENG][common] Ad probe failed, falling back to original URL');
+  return {
+    type: 'm3u8',
+    url: m3u8Url,
+    headers: { 'Referer': referer, 'User-Agent': kengUA },
+  };
+}
+
+// ── Provider: opensource-2 ──────────────────────────────────────
+
+function resolveBaseUrl(baseUrl) {
+  return (typeof baseUrl === 'string' && /^https?:\/\//i.test(baseUrl))
+    ? baseUrl
+    : ((typeof location !== 'undefined' && location.origin) ? location.origin : '');
+}
+
+function cleanText(value) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function stripHtml(value) {
+  return cleanText(value).replace(/<[^>]*>/g, ' ');
+}
+
+function absUrl(baseUrl, url) {
+  const text = cleanText(url);
+  if (!text) return '';
+  try {
+    return new URL(text, baseUrl).href;
+  } catch (_e) {
+    return text;
+  }
+}
+
+function imgUrl(url) {
+  const text = cleanText(url);
+  if (!text) return '';
+  try {
+    return new URL(text, 'https://phim.nguonc.com').href;
+  } catch (_e) {
+    return text;
+  }
+}
+
+function inferMediaType(item) {
+  const type = cleanText(item && item.type || '').toLowerCase();
+  const totalEpisodes = Number.parseInt(item && item.total_episodes ? String(item.total_episodes) : '', 10) || 0;
+  const currentEpisode = cleanText(item && item.current_episode || '').toLowerCase();
+  if (type === 'movie' || type === 'single' || /full/.test(currentEpisode)) {
+    return 'movie';
+  }
+  if (/tập|episode|phần|hoàn\s*tất/.test(currentEpisode) || totalEpisodes > 1) {
+    return 'series';
+  }
+  return 'series';
+}
+
+function isTrailer(item) {
+  const haystack = [
+    item && item.badge_text,
+    item && item.current_episode,
+    item && item.name,
+    item && item.original_name
+  ].map(cleanText).join(' ').toLowerCase();
+  return haystack.includes('trailer');
+}
+
+function parseGenres(item) {
+  const groups = item && item.category;
+  if (!groups || typeof groups !== 'object' || Array.isArray(groups)) return [];
+  const result = [];
+  Object.values(groups).forEach((group) => {
+    const groupName = cleanText(group && group.group && group.group.name ? group.group.name : '');
+    if (groupName && !/thể loại/i.test(groupName)) return;
+    const list = Array.isArray(group && group.list) ? group.list : [];
+    list.forEach((entry) => {
+      const name = cleanText(entry && entry.name ? entry.name : '');
+      if (name) result.push(name);
+    });
+  });
+  return [...new Set(result)];
+}
+
+function normalizeMovieItem(baseUrl, item) {
+  const thumb = cleanText(item.thumb_url || item.poster_url || '');
+  const poster = cleanText(item.poster_url || item.thumb_url || '');
+  const title = cleanText(item.name || '');
+  const slug = cleanText(item.slug || '');
+  const currentEpisode = cleanText(item.current_episode || '');
+  const quality = cleanText(item.quality || '');
+  const language = cleanText(item.language || '');
+
+  return {
+    rank: 0,
+    title,
+    title_original: cleanText(item.original_name || ''),
+    poster_url: imgUrl(thumb || poster),
+    thumbnail_url: imgUrl(poster || thumb),
+    url: slug ? absUrl(baseUrl, `/film/${encodeURIComponent(slug)}`) : '',
+    media_type: inferMediaType(item),
+    badge_text: currentEpisode || quality,
+    badge_sub: language,
+    year: cleanText(item.year || ''),
+    rating: cleanText(item.rating || ''),
+    synopsis: stripHtml(item.description || ''),
+    age_rating: cleanText(item.age_rating || ''),
+    episode_current: currentEpisode,
+    genres: parseGenres(item)
+  };
+}
+
+async function fetchJson(url) {
+  const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://phim.nguonc.com' } });
+  if (!res.ok) {
+    throw new Error('Fetch failed: ' + res.status);
+  }
+  return await res.json();
+}
+
+async function fetchItems(baseUrl, page = 1) {
+  const siteBase = resolveBaseUrl(baseUrl);
+  const url = new URL('/api/films/danh-sach/phim-le', siteBase);
+  url.searchParams.set('page', String(Number.parseInt(page || '1', 10) || 1));
+  const json = await fetchJson(url.href);
+  const items = Array.isArray(json && json.items) ? json.items : [];
+  return items
+    .filter((item) => item && !isTrailer(item))
+    .map((item) => normalizeMovieItem(siteBase, item))
+    .filter((movie) => movie.title && movie.url);
+}
+
+async function railGroupPhimLe(baseUrl) {
+  try {
+    const movies = await fetchItems(baseUrl, 1);
+    return JSON.stringify([{
+      id: 'phim_le',
+      title: 'Phim Lẻ',
+      subtitle: null,
+      card_height_percent: 0.18,
+      card_size_ratio: 0.667,
+      is_hero_source: false,
+      show_rank: false,
+      movies,
+      show_cta: { js_method: 'getAllPhimLe' }
+    }]);
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+}
+
+async function getAllPhimLe(baseUrl, page = 1) {
+  try {
+    const movies = await fetchItems(baseUrl, page);
+    return JSON.stringify(movies);
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+}

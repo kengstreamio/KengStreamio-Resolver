@@ -1,1 +1,544 @@
-function _isAdSegment(e){return-1!==e.indexOf("/adjump/")||/convertv\d+\//.test(e)||/^\/v\d+\/.*segment_/.test(e)}function parseAdsFromPlaylist(e){for(var t=[],r=e.split("\n"),n=0,i=null,s=0;s<r.length;s++){var o=r[s].trim();if(0===o.indexOf("#EXTINF:")){var a=o.match(/#EXTINF:([\d.]+)/);if(a){var l=parseFloat(a[1]);if(!isNaN(l))_isAdSegment((r[s+1]||"").trim())?null===i&&(i=n):null!==i&&(t.push({start:Math.round(100*i)/100,end:Math.round(100*n)/100,duration:Math.round(100*(n-i))/100}),i=null),n+=l}}}return null!==i&&t.push({start:Math.round(100*i)/100,end:Math.round(100*n)/100,duration:Math.round(100*(n-i))/100}),t}function shouldDetectAdsOnServer(e){return-1!==e.indexOf("kkphimplayer")||-1!==e.indexOf("phim1280.tv")}async function resolveAdsVariant(e,t){var r,n="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";try{r=new URL(e).origin}catch(e){r=""}var i={headers:{"User-Agent":n,Accept:"*/*","Accept-Language":"vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",Referer:t||r+"/",Origin:r||""}};try{var s=await fetch(e,i);if(!s.ok)return null;for(var o=(await s.text()).split("\n"),a="",l=0;l<o.length;l++){var u=o[l].trim();if(u&&"#"!==u.charAt(0)){a=u;break}}if(!a)return null;var c=a;if("h"!==a.charAt(0))c=e.substring(0,e.lastIndexOf("/")+1)+a;var d=null;try{var f=new AbortController,p=setTimeout(function(){f.abort()},2e3),m=await fetch(c,{headers:i.headers,signal:f.signal});if(clearTimeout(p),m.ok){var h=parseAdsFromPlaylist(await m.text());h.length>0&&(d=h,console.log("[KENG][common] Ads detected: "+JSON.stringify(d)))}}catch(e){}return console.log("[KENG][common] PA resolved: "+c+" | ads="+(null===d?"null":d.length)),{type:"m3u8",url:c,headers:{Referer:t,"User-Agent":n},ads:d}}catch(e){return null}}async function makeStreamM3U8Result(e,t){if(shouldDetectAdsOnServer(e)){console.log("[KENG][common] PA CDN detected, resolving variant: "+e);var r=await resolveAdsVariant(e,t);if(r)return r;console.log("[KENG][common] PA resolve failed, fallback to original URL")}return{type:"m3u8",url:e,headers:{Referer:t,"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"}}}async function getMovieDetail(e){function t(e){return String(e??"").replace(/\s+/g," ").trim()}function r(e){if(!e)return null;const t=parseInt(String(e).replace(/^0+/,""),10);return isNaN(t)?null:t}try{console.log(`[KENG][rophim-13] getMovieDetail: ${e}`);const i=await fetch(e,(n=e,{headers:{"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",Accept:"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8","Accept-Language":"vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",Referer:n||"https://onflix.lol/"}}));if(!i.ok)throw new Error(`HTTP ${i.status}`);const s=function(e){const t=[],r=/self\.__next_f\.push\(\[1,"([\s\S]*?)"\]\)/g;let n;for(;null!==(n=r.exec(e));)try{t.push(n[1].replace(/\\"/g,'"').replace(/\\\\/g,"\\"))}catch(e){}return t}(await i.text());if(0===s.length)throw new Error("No RSC payload found");const o=function(e){let t=null,r=null;for(const n of e){if(n.includes('"movie":{')){if(n.includes('"episodes":['))return{moviePush:n,episodesPush:n};t=n}n.includes('"episodes":[')&&(r=n)}return t?{moviePush:t,episodesPush:r}:null}(s);if(!o)throw new Error("No movie+episodes data in RSC payload");const a=function(e){const t='"movie":{',r=e.indexOf(t);if(-1===r)return null;const n=r+9-1;let i=0,s=!1,o=!1;for(let t=n;t<e.length;t++){const r=e[t];if(o)o=!1;else if("\\"!==r)if('"'!==r){if(!s&&("{"===r&&i++,"}"===r&&(i--,0===i)))return e.slice(n,t+1)}else s=!s;else o=!0}return null}(o.moviePush);if(!a)throw new Error("Cannot extract movie object");const l=JSON.parse(a);let u=[];if(o.episodesPush){const e=function(e){const t='"episodes":[',r=e.indexOf(t);if(-1===r)return null;const n=r+12-1;let i=0,s=!1,o=!1;for(let t=n;t<e.length;t++){const r=e[t];if(o)o=!1;else if("\\"!==r)if('"'!==r){if(!s&&("["===r&&i++,"]"===r&&(i--,0===i)))return e.slice(n,t+1)}else s=!s;else o=!0}return null}(o.episodesPush);e&&(u=JSON.parse(e))}const c=function(e){const n=new Map,i=new Set([]);for(const s of e){let e=r(s.name||s.slug),o=null;if(null===e){const r=t(s.name||s.slug||"");if(!r)continue;e=0,o=r}if(i.has(s.src))continue;n.has(e)||n.set(e,{num:e,name:o||`Tập ${e}`,servers:[]});const a=n.get(e),l=t(s.server_name||"Vietsub #1"),u=s.link_m3u8||"",c=s.link_embed||"",d=u||c;d&&a.servers.push({server:l,url:d})}const s=e=>e.includes("(SN)")?0:e.includes("(OP)")?1:e.includes("(NC)")?2:e.includes("(PA)")?100:99;for(const[,e]of n)e.servers.sort((e,t)=>s(e.server)-s(t.server));return Array.from(n.values()).sort((e,t)=>e.num-t.num).map((e,t)=>({episode_index:t,name:e.name,servers:e.servers}))}(u),d=[{name:"Phần 1",episodes:c}],f=Array.isArray(l.actors)?l.actors.map(e=>({name:t(e.name||e.original_name||""),avatar_url:t(e.image_url||"")})).filter(e=>e.name):[],p=Array.isArray(l.categories)?l.categories.map(e=>t(e.name||"")):[],m=Array.isArray(l.countries)&&l.countries.length>0?t(l.countries[0].name||""):"",h="phim-bo"===l.type?"series":"movie",g=l.slug||"",v={id:g,title:t(l.title||""),title_original:t(l.original_title||""),poster_url:t(l.poster_url||""),thumbnail_url:t(l.thumb_url||""),url:g?`https://onflix.lol/phim/${g}`:e,year:String(l.year||""),duration:t(l.time||""),rating:String(l.tmdb_vote_average||l.rated||""),country:m,genres:p,description:function(e){return String(e??"").replace(/<[^>]+>/g," ").replace(/&[a-z]+;/gi," ").replace(/\s+/g," ").trim()}(l.content||""),media_type:h,total_episodes:parseInt(l.total_episode||l.episode_total||"0",10)||0,badge_text:t(l.episode_status||l.episode_current||""),parts:d,actors:f},A=d.reduce((e,t)=>e+t.episodes.length,0);return console.log(`[KENG][rophim-13] getMovieDetail: ${v.title} (${v.media_type}) — ${d.length} part(s), ${A} episodes, ${f.length} actors`),JSON.stringify(v)}catch(e){return console.error(`[KENG][rophim-13] getMovieDetail ERROR: ${e.message}`),JSON.stringify({error:e.message})}var n}
+/**
+ * Keng Common JS — shared utilities injected before each provider's resolver.
+ * Keep this file self-contained; it will be prepended to provider JS at deploy time.
+ *
+ * Contract: all functions are available in provider resolvers via normal JS scoping.
+ */
+
+// ── HLS Ad Detection ────────────────────────────────────────────────────────
+// Parse HLS variant playlist for SSAI ad segments.
+// Detects ad patterns in HLS segment URLs:
+//   - /adjump/ URLs
+//   - convertvN/ prefix segments (convertv7/, convertv8/, convertv9/, ...)
+//   - /vN/ prefix with segment_XXX.ts (numbered SSAI ad segments, any version)
+//
+// NOTE: every clause must evaluate to a boolean. Never compare a .test() result
+// against -1 — `-1 !== false` is true, which classifies every segment as an ad
+// and makes the whole movie look like one giant ad break.
+function _isAdSegment(segment) {
+  return segment.indexOf('/adjump/') !== -1
+      || /convertv\d+\//.test(segment)
+      || /^\/v\d+\/.*segment_/.test(segment);
+}
+
+function parseAdsFromPlaylist(playlistText) {
+  var ads = [];
+  var lines = playlistText.split('\n');
+  var cumulative = 0.0;
+  var adStart = null;
+
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (line.indexOf('#EXTINF:') !== 0) continue;
+
+    var match = line.match(/#EXTINF:([\d.]+)/);
+    if (!match) continue;
+    var duration = parseFloat(match[1]);
+    if (isNaN(duration)) continue;
+
+    var segment = (lines[i + 1] || '').trim();
+
+    if (_isAdSegment(segment)) {
+      if (adStart === null) adStart = cumulative;
+    } else {
+      if (adStart !== null) {
+        ads.push({
+          start: Math.round(adStart * 100) / 100,
+          end: Math.round(cumulative * 100) / 100,
+          duration: Math.round((cumulative - adStart) * 100) / 100,
+        });
+        adStart = null;
+      }
+    }
+    cumulative += duration;
+  }
+
+  if (adStart !== null) {
+    ads.push({
+      start: Math.round(adStart * 100) / 100,
+      end: Math.round(cumulative * 100) / 100,
+      duration: Math.round((cumulative - adStart) * 100) / 100,
+    });
+  }
+
+  return ads;
+}
+
+// Total playable duration of a playlist, in seconds.
+function _playlistTotalDuration(playlistText) {
+  var lines = playlistText.split('\n');
+  var total = 0.0;
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (line.indexOf('#EXTINF:') !== 0) continue;
+    var match = line.match(/#EXTINF:([\d.]+)/);
+    if (!match) continue;
+    var d = parseFloat(match[1]);
+    if (!isNaN(d)) total += d;
+  }
+  return Math.round(total * 100) / 100;
+}
+
+// Sanity-checked ad detection.
+// Returns an array of ad zones, or null when the result looks bogus — a
+// mis-classifying detector would otherwise report the entire movie as one ad
+// zone and the player would seek straight to the end.
+//
+// null means "detection not trustworthy" and is distinct from [] ("no ads"),
+// which the Dart side relies on (see StreamResult.ads).
+function detectAdsSafe(playlistText) {
+  var total = _playlistTotalDuration(playlistText);
+  if (total <= 0) return null;
+
+  var ads = parseAdsFromPlaylist(playlistText);
+  if (ads.length === 0) return [];
+
+  var adTotal = 0.0;
+  for (var i = 0; i < ads.length; i++) adTotal += ads[i].duration;
+
+  // Guard 1 — ads covering (nearly) the whole playlist is a detector failure,
+  // not a real stream.
+  if (adTotal >= total * 0.8) {
+    console.log('[KENG][common] Ads rejected: ' + adTotal + 's of ' + total + 's (>=80%) — treating as detection failure');
+    return null;
+  }
+
+  // Guard 2 — a single zone spanning start to end, same failure shape.
+  if (ads.length === 1 && ads[0].start <= 0.01 && ads[0].end >= total - 0.01) {
+    console.log('[KENG][common] Ads rejected: single zone spans whole playlist');
+    return null;
+  }
+
+  return ads;
+}
+
+function _isMasterPlaylist(playlistText) {
+  return playlistText.indexOf('#EXT-X-STREAM-INF') !== -1;
+}
+
+// Resolve a possibly-relative playlist reference against its base URL.
+// Handles absolute, root-relative, protocol-relative and plain relative paths.
+function _resolveUrl(ref, baseUrl) {
+  try {
+    return new URL(ref, baseUrl).href;
+  } catch (_e) {
+    return ref;
+  }
+}
+
+// First variant URI declared in a master playlist, or '' if none.
+function _firstVariantPath(masterText) {
+  var lines = masterText.split('\n');
+  for (var i = 0; i < lines.length; i++) {
+    if (lines[i].trim().indexOf('#EXT-X-STREAM-INF') !== 0) continue;
+    for (var j = i + 1; j < lines.length; j++) {
+      var t = lines[j].trim();
+      if (!t) continue;
+      if (t.charAt(0) === '#') continue;
+      return t;
+    }
+  }
+  return '';
+}
+
+// PA-class CDN. These are served as a master playlist whose variant URL must be
+// handed to the player directly — established behaviour, keep it.
+// Every other CDN keeps its original URL so the player can still do ABR.
+function _isPaCdn(url) {
+  return url.indexOf('kkphimplayer') !== -1 || url.indexOf('phim1280.tv') !== -1;
+}
+
+function _kengFetchText(url, headers, timeoutMs) {
+  var controller = new AbortController();
+  var timer = setTimeout(function () { controller.abort(); }, timeoutMs);
+  return fetch(url, { headers: headers, signal: controller.signal })
+    .then(function (resp) {
+      clearTimeout(timer);
+      if (!resp.ok) return null;
+      return resp.text();
+    })
+    .catch(function () {
+      clearTimeout(timer);
+      return null;
+    });
+}
+
+// Fetch + resolve m3u8 → ad-annotated stream result.
+// Works on any CDN: detection is driven by playlist content, not by domain.
+// Returns { type, url, headers, ads } or null on failure.
+async function resolveAdsVariant(m3u8Url, referer) {
+  var kengUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+  var origin;
+  try { origin = new URL(m3u8Url).origin; } catch (_e) { origin = ''; }
+
+  var reqHeaders = {
+    'User-Agent': kengUA,
+    'Accept': '*/*',
+    'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Referer': referer || origin + '/',
+    'Origin': origin || '',
+  };
+
+  try {
+    var firstText = await _kengFetchText(m3u8Url, reqHeaders, 2000);
+    if (firstText === null) return null;
+
+    var mediaText = firstText;
+    var variantUrl = m3u8Url;
+
+    if (_isMasterPlaylist(firstText)) {
+      var variantPath = _firstVariantPath(firstText);
+      if (!variantPath) return null;
+      variantUrl = _resolveUrl(variantPath, m3u8Url);
+
+      var variantText = await _kengFetchText(variantUrl, reqHeaders, 2000);
+      if (variantText === null) {
+        // Variant unreachable — still playable, just without ad info.
+        mediaText = '';
+      } else {
+        mediaText = variantText;
+      }
+    }
+    // else: m3u8Url is already a media playlist — parse it directly and never
+    // mistake its first segment (.ts) for a variant URL.
+
+    var ads = mediaText ? detectAdsSafe(mediaText) : null;
+    if (ads && ads.length > 0) {
+      console.log('[KENG][common] Ads detected: ' + JSON.stringify(ads));
+    }
+
+    // PA needs the resolved variant URL; everyone else keeps the original so
+    // the player retains adaptive bitrate across renditions.
+    var outUrl = _isPaCdn(m3u8Url) ? variantUrl : m3u8Url;
+
+    console.log('[KENG][common] Stream resolved: ' + outUrl + ' | ads=' + (ads === null ? 'null' : ads.length));
+    return {
+      type: 'm3u8',
+      url: outUrl,
+      headers: { 'Referer': referer, 'User-Agent': kengUA },
+      ads: ads,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+// Main entry: probe the playlist for SSAI ads → build result.
+// Usage: var result = await makeStreamM3U8Result(m3u8Url, referer);
+async function makeStreamM3U8Result(m3u8Url, referer) {
+  var kengUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+  var result = await resolveAdsVariant(m3u8Url, referer);
+  if (result) return result;
+
+  console.log('[KENG][common] Ad probe failed, falling back to original URL');
+  return {
+    type: 'm3u8',
+    url: m3u8Url,
+    headers: { 'Referer': referer, 'User-Agent': kengUA },
+  };
+}
+
+// ── Provider: rophim13 ──────────────────────────────────────
+
+/**
+ * Detail Resolver v1 — onflix.lol (rophim-13)
+ * Contract: getMovieDetail(filmUrl) → JSON object with parts[] field (v6.1)
+ * Source: Next.js RSC payload embedded in detail page HTML
+ * Episodes: Directly in RSC payload with link_m3u8 + link_embed
+ */
+async function getMovieDetail(filmUrl) {
+  const _API = 'https://k8s.onflixcdn.com/api';
+  const _UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+
+  function _fetchOpts(referer) {
+    return {
+      headers: {
+        'User-Agent': _UA,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Referer': referer || 'https://onflix.lol/',
+      },
+    };
+  }
+
+  function _clean(v) {
+    return String(v ?? '').replace(/\s+/g, ' ').trim();
+  }
+
+  function _stripHtml(html) {
+    return String(html ?? '').replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/gi, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  function _parseEpNum(name) {
+    if (!name) return null;
+    const n = parseInt(String(name).replace(/^0+/, ''), 10);
+    return isNaN(n) ? null : n;
+  }
+
+  /**
+   * Extract RSC pushes from Next.js HTML
+   * Pattern: self.__next_f.push([1,"..."])
+   */
+  function _extractRscPushes(html) {
+    const pushes = [];
+    const re = /self\.__next_f\.push\(\[1,"([\s\S]*?)"\]\)/g;
+    let m;
+    while ((m = re.exec(html)) !== null) {
+      try {
+        pushes.push(m[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\'));
+      } catch (_) {
+        // skip malformed
+      }
+    }
+    return pushes;
+  }
+
+  /**
+   * Find RSC push(es) containing movie + episodes data
+   * They may be in the same push (old format) or separate pushes (new format).
+   * Returns { moviePush, episodesPush } where episodesPush may be null.
+   */
+  function _findDataPush(pushes) {
+    let moviePush = null;
+    let episodesPush = null;
+
+    for (const p of pushes) {
+      // Look for movie data
+      if (p.includes('"movie":{')) {
+        if (p.includes('"episodes":[')) {
+          // Combined format — both in one push
+          return { moviePush: p, episodesPush: p };
+        }
+        moviePush = p;
+      }
+      // Look for episodes data (may be in a different push)
+      if (p.includes('"episodes":[')) {
+        episodesPush = p;
+      }
+    }
+
+    if (moviePush) {
+      return { moviePush, episodesPush };
+    }
+    return null;
+  }
+
+  /**
+   * Extract movie object from RSC push using brace-depth parsing
+   */
+  function _extractMovieObj(text) {
+    const key = '"movie":{';
+    const idx = text.indexOf(key);
+    if (idx === -1) return null;
+
+    const start = idx + key.length - 1; // position of opening {
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+      if (esc) { esc = false; continue; }
+      if (ch === '\\') { esc = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === '{') depth++;
+      if (ch === '}') {
+        depth--;
+        if (depth === 0) {
+          return text.slice(start, i + 1);
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Extract episodes array from RSC push using bracket-depth parsing
+   */
+  function _extractEpisodesArr(text) {
+    const key = '"episodes":[';
+    const idx = text.indexOf(key);
+    if (idx === -1) return null;
+
+    const start = idx + key.length - 1; // position of opening [
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+      if (esc) { esc = false; continue; }
+      if (ch === '\\') { esc = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === '[') depth++;
+      if (ch === ']') {
+        depth--;
+        if (depth === 0) {
+          return text.slice(start, i + 1);
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Group flat episodes by episode number → nested with servers[]
+   */
+  function _groupEpisodes(rawEps) {
+    const map = new Map(); // key = episode number
+    const _SKIP_SRCS = new Set([]); // NC: was blocked (DNS+CORS), now handled via embed type
+
+    for (const ep of rawEps) {
+      let num = _parseEpNum(ep.name || ep.slug);
+      let displayName = null; // null → use "Tập ${num}" default
+
+      // Cinema/phim-le movies have non-numeric names like "FULL"
+      if (num === null) {
+        const rawName = _clean(ep.name || ep.slug || '');
+        if (!rawName) continue; // truly empty — skip
+        num = 0; // default episode number for single-episode movies
+        displayName = rawName; // keep original name (e.g. "FULL")
+      }
+
+      // Skip NC server — ss.onflixstream.site DNS NXDOMAIN, embed cross-origin CORS blocked
+      if (_SKIP_SRCS.has(ep.src)) continue;
+
+      if (!map.has(num)) {
+        map.set(num, { num, name: displayName || `Tập ${num}`, servers: [] });
+      }
+
+      const entry = map.get(num);
+      const serverName = _clean(ep.server_name || 'Vietsub #1');
+      const m3u8 = ep.link_m3u8 || '';
+      const embed = ep.link_embed || '';
+
+      // Prefer m3u8, fallback embed
+      const url = m3u8 || embed;
+      if (url) {
+        entry.servers.push({ server: serverName, url });
+      }
+    }
+
+    // Sort servers: SN → OP → NC → unknown → PA (PA lowest priority)
+    const _prio = (s) => {
+      if (s.includes('(SN)')) return 0;
+      if (s.includes('(OP)')) return 1;
+      if (s.includes('(NC)')) return 2;
+      if (s.includes('(PA)')) return 100;
+      return 99;
+    };
+    for (const [, entry] of map) {
+      entry.servers.sort((a, b) => _prio(a.server) - _prio(b.server));
+    }
+
+    return Array.from(map.values())
+      .sort((a, b) => a.num - b.num)
+      .map((ep, idx) => ({
+        episode_index: idx,
+        name: ep.name,
+        servers: ep.servers,
+      }));
+  }
+
+  try {
+    console.log(`[KENG][rophim-13] getMovieDetail: ${filmUrl}`);
+
+    // 1. Fetch detail page HTML
+    const resp = await fetch(filmUrl, _fetchOpts(filmUrl));
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+    const html = await resp.text();
+
+    // 2. Extract RSC pushes
+    const pushes = _extractRscPushes(html);
+    if (pushes.length === 0) {
+      throw new Error('No RSC payload found');
+    }
+
+    // 3. Find data push(es) with movie + episodes
+    const dataPush = _findDataPush(pushes);
+    if (!dataPush) {
+      throw new Error('No movie+episodes data in RSC payload');
+    }
+
+    // 4. Extract movie object
+    const movieStr = _extractMovieObj(dataPush.moviePush);
+    if (!movieStr) {
+      throw new Error('Cannot extract movie object');
+    }
+    const movie = JSON.parse(movieStr);
+
+    // 5. Extract episodes array (may be in a separate push, or empty)
+    let rawEps = [];
+    if (dataPush.episodesPush) {
+      const epsStr = _extractEpisodesArr(dataPush.episodesPush);
+      if (epsStr) {
+        rawEps = JSON.parse(epsStr);
+      }
+    }
+
+    // 6. Group episodes
+    const episodes = _groupEpisodes(rawEps);
+
+    // 7. Build parts (single part — onflix has no multi-season)
+    const parts = [{
+      name: 'Phần 1',
+      episodes,
+    }];
+
+    // 8. Build actors
+    const actors = Array.isArray(movie.actors)
+      ? movie.actors.map(a => ({
+          name: _clean(a.name || a.original_name || ''),
+          avatar_url: _clean(a.image_url || ''),
+        })).filter(a => a.name)
+      : [];
+
+    // 9. Build genres
+    const genres = Array.isArray(movie.categories)
+      ? movie.categories.map(c => _clean(c.name || ''))
+      : [];
+
+    // 10. Build country
+    const country = Array.isArray(movie.countries) && movie.countries.length > 0
+      ? _clean(movie.countries[0].name || '')
+      : '';
+
+    // 11. media_type mapping
+    const mediaType = movie.type === 'phim-bo' ? 'series' : 'movie';
+
+    // 12. Build detail
+    const slug = movie.slug || '';
+    const detail = {
+      id: slug,
+      title: _clean(movie.title || ''),
+      title_original: _clean(movie.original_title || ''),
+      poster_url: _clean(movie.poster_url || ''),
+      thumbnail_url: _clean(movie.thumb_url || ''),
+      url: slug ? `https://onflix.lol/phim/${slug}` : filmUrl,
+      year: String(movie.year || ''),
+      duration: _clean(movie.time || ''),
+      rating: String(movie.tmdb_vote_average || movie.rated || ''),
+      country,
+      genres,
+      description: _stripHtml(movie.content || ''),
+      media_type: mediaType,
+      total_episodes: parseInt(movie.total_episode || movie.episode_total || '0', 10) || 0,
+      badge_text: _clean(movie.episode_status || movie.episode_current || ''),
+      parts,
+      actors,
+    };
+
+    const totalEps = parts.reduce((s, p) => s + p.episodes.length, 0);
+    console.log(`[KENG][rophim-13] getMovieDetail: ${detail.title} (${detail.media_type}) — ${parts.length} part(s), ${totalEps} episodes, ${actors.length} actors`);
+
+    return JSON.stringify(detail);
+
+  } catch (e) {
+    console.error(`[KENG][rophim-13] getMovieDetail ERROR: ${e.message}`);
+    return JSON.stringify({ error: e.message });
+  }
+}

@@ -1,1 +1,821 @@
-function _isAdSegment(t){return-1!==t.indexOf("/adjump/")||/convertv\d+\//.test(t)||/^\/v\d+\/.*segment_/.test(t)}function parseAdsFromPlaylist(t){for(var e=[],i=t.split("\n"),s=0,n=null,r=0;r<i.length;r++){var o=i[r].trim();if(0===o.indexOf("#EXTINF:")){var l=o.match(/#EXTINF:([\d.]+)/);if(l){var a=parseFloat(l[1]);if(!isNaN(a))_isAdSegment((i[r+1]||"").trim())?null===n&&(n=s):null!==n&&(e.push({start:Math.round(100*n)/100,end:Math.round(100*s)/100,duration:Math.round(100*(s-n))/100}),n=null),s+=a}}}return null!==n&&e.push({start:Math.round(100*n)/100,end:Math.round(100*s)/100,duration:Math.round(100*(s-n))/100}),e}function shouldDetectAdsOnServer(t){return-1!==t.indexOf("kkphimplayer")||-1!==t.indexOf("phim1280.tv")}async function resolveAdsVariant(t,e){var i,s="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";try{i=new URL(t).origin}catch(t){i=""}var n={headers:{"User-Agent":s,Accept:"*/*","Accept-Language":"vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",Referer:e||i+"/",Origin:i||""}};try{var r=await fetch(t,n);if(!r.ok)return null;for(var o=(await r.text()).split("\n"),l="",a=0;a<o.length;a++){var c=o[a].trim();if(c&&"#"!==c.charAt(0)){l=c;break}}if(!l)return null;var g=l;if("h"!==l.charAt(0))g=t.substring(0,t.lastIndexOf("/")+1)+l;var h=null;try{var u=new AbortController,m=setTimeout(function(){u.abort()},2e3),p=await fetch(g,{headers:n.headers,signal:u.signal});if(clearTimeout(m),p.ok){var d=parseAdsFromPlaylist(await p.text());d.length>0&&(h=d,console.log("[KENG][common] Ads detected: "+JSON.stringify(h)))}}catch(t){}return console.log("[KENG][common] PA resolved: "+g+" | ads="+(null===h?"null":h.length)),{type:"m3u8",url:g,headers:{Referer:e,"User-Agent":s},ads:h}}catch(t){return null}}async function makeStreamM3U8Result(t,e){if(shouldDetectAdsOnServer(t)){console.log("[KENG][common] PA CDN detected, resolving variant: "+t);var i=await resolveAdsVariant(t,e);if(i)return i;console.log("[KENG][common] PA resolve failed, fallback to original URL")}return{type:"m3u8",url:t,headers:{Referer:e,"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"}}}async function railGroupHomepage(t){const e=t;async function i(t){const e=Date.now();console.log("[KENG][Motchill] fetching: "+t);const i=await fetch(t);if(!i.ok)throw new Error("Fetch failed "+i.status+": "+t);const s=await i.text();return console.log("[KENG][Motchill] fetched: "+t+" ("+(Date.now()-e)+"ms, "+s.length+"B)"),s}function s(t){const e=t.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/);return e?e[1]:""}function n(t){return t.replace(/&quot;/g,'"').replace(/&amp;/g,"&").replace(/&#039;/g,"'").trim()}function r(t){return{badge_text:t,badge_sub:""}}function o(t){return/tập\s*\d+/i.test(t)||/^\d+\/\d+$/.test(t)||/\d+\s*tập/i.test(t)?"series":"movie"}function l(t,i,s){const o='class="tab-content1" data-id="'+i+'"',l=t.indexOf(o);if(l<0)throw new Error("tab-content1 data-id="+i+" not found");const a=[],c=t.substring(l,l+12e3).split(/<li class="item/);for(let t=1;t<c.length&&a.length<16;t++){const i=c[t],o=i.indexOf("</li>"),l=o>=0?i.substring(0,o):i.substring(0,2e3),g=l.match(/href="(https?:\/\/[^"]+\/phim\/([^"/?]+))"[^>]*title="([^"]+)"/),h=l.match(/data-original="(\/storage\/[^"]+)"/),u=l.match(/class="label[^"]*"[^>]*>([^<]+)</);if(!g)continue;const m=l.match(/class="name"[\s\S]*?title="([^"]+)"/),p=n(m?m[1]:g[3]);if(!p)continue;const d=u?u[1].trim():"";if(/trailer/i.test(d)||/trailer/i.test(p))continue;const{badge_text:f,badge_sub:_}=r(d),w=p.match(/\b(20\d{2})\s*$/),b=w?w[1]:"",N=w?p.slice(0,-b.length).trim():p;a.push({rank:0,title:N,title_original:"",poster_url:h?e+h[1]:"",url:g[1],media_type:s,badge_text:f,badge_sub:_,year:b,rating:"",synopsis:"",age_rating:"",episode_current:f,genres:[]})}return a}try{const t=Date.now();console.log("[KENG][10-12][Motchill] railGroupHomepage() start");const a=await i(e);console.log("[KENG][10-12][Motchill] HTML size: "+a.length);const c=function(t){const i=t.indexOf('class="list-films film-hot"');if(i<0)throw new Error("film-hot section not found");const s=t.substring(i,i+2e4),l=/<article[^>]+class="item"[^>]*title="([^"]*)"[\s\S]*?<\/article>/g,a=[];let c;for(;null!==(c=l.exec(s))&&a.length<20;){const t=c[0],i=n(c[1]);if(!i)continue;const s=t.match(/data-original="([^"]+)"|<img[^>]+src="([^"]+)"/);let l=s&&(s[1]||s[2])||"";l&&l.startsWith("/")&&(l=e+l);const g=t.match(/href="(https?:\/\/[^"]+\/phim\/([^"/?]+))"/);if(!g)continue;const h=t.match(/<span[^>]+class="label"[^>]*>([^<]+)<\/span>/),u=h?h[1].trim():"";if(/trailer/i.test(u)||/trailer/i.test(i))continue;const{badge_text:m,badge_sub:p}=r(u),d=t.match(/<span[^>]+class="label-quality"[^>]*>([^<]+)<\/span>/),f=p||(d?d[1].trim():"");a.push({rank:0,title:i,title_original:"",poster_url:l,url:g[1],media_type:o(m),badge_text:m,badge_sub:f,year:"",rating:"",synopsis:"",age_rating:"",episode_current:m,genres:[],slug:g[2]})}return a}(a),g={};for(const t of c)t.slug&&t.poster_url&&(g[t.slug]=t.poster_url);const h=c.map(({slug:t,...e})=>e);console.log("[KENG][10-12][Motchill] phim_hot: "+h.length+" items");const u=function(t,e){const i=t.indexOf("most-view block");if(i<0)throw new Error("most-view section not found");const s=t.substring(i,i+2e4),r=/<li class="item day"\s*>([\s\S]*?)<\/li>/gi,o=[];let l;for(;null!==(l=r.exec(s))&&o.length<10;){const t=l[1],i=t.match(/<span[^>]*number-rank[^>]*>(\d+)<\/span>/),s=t.match(/href="(https?:\/\/[^"]+\/phim\/([^"/?]+))"[^>]*title="([^"]+)"/),r=t.match(/<div class="count_view">([^<]+)<\/div>/);if(!s)continue;const a=s[2];o.push({rank:i?parseInt(i[1]):o.length+1,title:n(s[3]),title_original:"",poster_url:e[a]||"",url:s[1],media_type:"series",badge_text:r?r[1].trim():"",badge_sub:"",year:"",rating:"",synopsis:"",age_rating:"",episode_current:"",genres:[],slug:a})}return o}(a,g),m=u.filter(t=>!t.poster_url);if(m.length>0){console.log("[KENG][10-12][Motchill] top10_series: fetching "+m.length+" missing posters");(await Promise.allSettled(m.map(t=>i(t.url)))).forEach((t,e)=>{"fulfilled"===t.status&&(m[e].poster_url=s(t.value))})}const p=u.map(({slug:t,...e})=>e);console.log("[KENG][10-12][Motchill] top10_series: "+p.length+" items");const d=function(t){const i=t.indexOf("Top phim lẻ");if(i<0)throw new Error("Top phim lẻ section not found");const s=t.substring(i,i+1e4),r=/<li class="film-item-ver">([\s\S]*?)<\/li>/gi,o=[];let l;for(;null!==(l=r.exec(s))&&o.length<10;){const t=l[1],i=t.match(/href="(https?:\/\/[^"]+\/phim\/([^"/?]+))"[^>]*title="([^"]+)"/),s=t.match(/data-original="(\/storage\/[^"]+)"/),r=t.match(/class="real-name"[^>]*>\s*([^<]+)\s*</),a=t.match(/data-rating="([^"]+)"/);if(!i)continue;const c=n(i[3]),g=a?(parseFloat(a[1])/10).toFixed(1):"";o.push({rank:o.length+1,title:c,title_original:"",poster_url:s?e+s[1]:"",url:i[1],media_type:"movie",badge_text:"",badge_sub:"",year:r?r[1].trim():"",rating:g,synopsis:"",age_rating:"",episode_current:"",genres:[],slug:i[2]})}return o}(a),f=d.filter(t=>!t.poster_url);if(f.length>0){console.log("[KENG][10-12][Motchill] top10_movies: fetching "+f.length+" missing posters");(await Promise.allSettled(f.map(t=>i(t.url)))).forEach((t,e)=>{"fulfilled"===t.status&&(f[e].poster_url=s(t.value))})}const _=d.map(({slug:t,...e})=>e);console.log("[KENG][10-12][Motchill] top10_movies: "+_.length+" items");const w=l(a,"1","series");console.log("[KENG][10-12][Motchill] new_series: "+w.length+" items");const b=l(a,"2","movie");console.log("[KENG][10-12][Motchill] new_movies: "+b.length+" items");const N=l(a,"3","movie");console.log("[KENG][10-12][Motchill] cinema: "+N.length+" items");const v=[{id:"phim_hot",title:"Top Phim Hot",subtitle:null,card_height_percent:.18,card_size_ratio:.667,is_hero_source:!0,show_rank:!1,movies:h,show_cta:null},{id:"top10_series",title:"Top 10 Phim Bộ",subtitle:null,card_height_percent:.18,card_size_ratio:.667,is_hero_source:!1,show_rank:!0,movies:p,show_cta:null},{id:"top10_movies",title:"Top 10 Phim Lẻ",subtitle:null,card_height_percent:.18,card_size_ratio:.667,is_hero_source:!1,show_rank:!0,movies:_,show_cta:null},{id:"new_series",title:"Phim Bộ Mới",subtitle:null,card_height_percent:.18,card_size_ratio:.667,is_hero_source:!1,show_rank:!1,movies:w,show_cta:{js_method:"getAllNewSeries"}},{id:"new_movies",title:"Phim Lẻ Mới",subtitle:null,card_height_percent:.18,card_size_ratio:.667,is_hero_source:!1,show_rank:!1,movies:b,show_cta:{js_method:"getAllNewMovies"}},{id:"cinema",title:"Phim Chiếu Rạp",subtitle:null,card_height_percent:.18,card_size_ratio:.667,is_hero_source:!1,show_rank:!1,movies:N,show_cta:{js_method:"getAllCinema"}}];return console.log("[KENG][10-12][Motchill] railGroupHomepage() SUCCESS: 6 rails, total="+(Date.now()-t)+"ms"),JSON.stringify(v)}catch(t){return console.log("[KENG][10-12][Motchill] ERROR railGroupHomepage: "+t.message),JSON.stringify({error:t.message})}}async function getAllNewSeries(t,e=1){const i=t;async function s(t){const e=await fetch(t);if(!e.ok)throw new Error("Fetch failed "+e.status+": "+t);return e.text()}try{console.log("[KENG][5-7a][Motchill] getAllNewSeries(page="+e+")");const t=i+"/danh-sach/phim-bo?page="+e,n=function(t){const e=t.split('<li class="item'),s=[];for(let t=1;t<e.length;t++){const n=e[t],r=n.indexOf("</li>"),o=r>=0?n.substring(0,r):n.substring(0,2e3),l=o.match(/href="(https?:\/\/[^"]+\/phim\/([^"/?]+))"/),a=o.match(/data-original="(\/storage\/[^"]+)"/),c=o.match(/class="label[^"]*"[^>]*>([^<]+)</);if(!l)continue;const g=o.match(/class="name"[\s\S]*?title="([^"]+)"/),h=g?g[1].replace(/&quot;/g,'"').replace(/&amp;/g,"&").replace(/&#039;/g,"'"):"";if(!h)continue;const u=h.match(/\b(20\d{2})\s*$/),m=u?u[1]:"",p=u?h.slice(0,-m.length).trim():h,d=c?c[1].trim():"";if(d.toLowerCase().includes("trailer"))continue;const f=d,_="";s.push({rank:0,title:p,title_original:"",poster_url:a?i+a[1]:"",url:l[1],media_type:"series",badge_text:f,badge_sub:_,year:m,rating:"",synopsis:"",age_rating:"",episode_current:f,genres:[],slug:l[2]})}return s}(await s(t));if(0===n.length)return console.log("[KENG][5-7a][Motchill] getAllNewSeries() END — no more items"),JSON.stringify([]);const r=n.filter(t=>!t.poster_url);if(r.length>0){(await Promise.allSettled(r.map(t=>s(t.url)))).forEach((t,e)=>{"fulfilled"===t.status&&(r[e].poster_url=function(t){const e=t.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/);return e?e[1]:""}(t.value))})}const o=n.map(({slug:t,...e})=>e);return console.log("[KENG][5-7a][Motchill] getAllNewSeries() SUCCESS: "+o.length+" items"),JSON.stringify(o)}catch(t){return console.log("[KENG][5-7a][Motchill] getAllNewSeries() ERROR: "+t.message),JSON.stringify({error:t.message})}}async function getAllNewMovies(t,e=1){const i=t;try{console.log("[KENG][5-7a][Motchill] getAllNewMovies(page="+e+")");const t=i+"/danh-sach/phim-le?page="+e,s=await async function(t){const e=await fetch(t);if(!e.ok)throw new Error("Fetch failed "+e.status+": "+t);return e.text()}(t),n=function(t){const e=t.split('<li class="item'),s=[];for(let t=1;t<e.length;t++){const n=e[t].indexOf("</li>"),r=n>=0?e[t].substring(0,n):e[t].substring(0,2e3),o=r.match(/href="(https?:\/\/[^"]+\/phim\/([^"/?]+))"/),l=r.match(/class="name"[\s\S]{0,300}?title="([^"]+)"/),a=r.match(/data-original="([^"]+)"/),c=r.match(/class="label[^"]*">([^<]+)</);if(!o)continue;const g=(l?l[1]:"").replace(/&quot;/g,'"').replace(/&amp;/g,"&").replace(/&#039;/g,"'").trim();if(!g)continue;const h=c?c[1].trim():"";if(h.toLowerCase().includes("trailer")||g.toLowerCase().includes("trailer"))continue;let u=g,m="";const p=g.match(/\s+((?:19|20)\d{2})$/);p&&(m=p[1],u=g.replace(p[0],"").trim());const d=h,f="";let _=a?a[1]:"";_&&!_.startsWith("http")&&(_=i+_),s.push({rank:0,title:u,title_original:"",poster_url:_,url:o[1],media_type:"movie",badge_text:d,badge_sub:f,year:m,rating:"",synopsis:"",age_rating:"",episode_current:d,genres:[]})}return s}(s);return 0===n.length?(console.log("[KENG][5-7a][Motchill] getAllNewMovies() END — no more items"),JSON.stringify([])):(console.log("[KENG][5-7a][Motchill] getAllNewMovies() SUCCESS: "+n.length+" items"),JSON.stringify(n))}catch(t){return console.log("[KENG][5-7a][Motchill] getAllNewMovies() ERROR: "+t.message),JSON.stringify({error:t.message})}}async function getAllCinema(t,e=1){const i=t;try{console.log("[KENG][5-7a][Motchill] getAllCinema(page="+e+")");const t=i+"/danh-sach/phim-chieu-rap?page="+e,s=await async function(t){const e=await fetch(t);if(!e.ok)throw new Error("Fetch failed "+e.status+": "+t);return e.text()}(t),n=function(t){const e=t.split('<li class="item'),s=[];for(let t=1;t<e.length;t++){const n=e[t].indexOf("</li>"),r=n>=0?e[t].substring(0,n):e[t].substring(0,2e3),o=r.match(/href="(https?:\/\/[^"]+\/phim\/([^"/?]+))"/),l=r.match(/class="name"[\s\S]{0,300}?title="([^"]+)"/),a=r.match(/data-original="([^"]+)"/),c=r.match(/class="label[^"]*">([^<]+)</);if(!o)continue;const g=(l?l[1]:"").replace(/&quot;/g,'"').replace(/&amp;/g,"&").replace(/&#039;/g,"'").trim();if(!g)continue;const h=c?c[1].trim():"";if(h.toLowerCase().includes("trailer")||g.toLowerCase().includes("trailer"))continue;let u=g,m="";const p=g.match(/\s+((?:19|20)\d{2})$/);p&&(m=p[1],u=g.replace(p[0],"").trim());const d=h,f="";let _=a?a[1]:"";_&&!_.startsWith("http")&&(_=i+_),s.push({rank:0,title:u,title_original:"",poster_url:_,url:o[1],media_type:"movie",badge_text:d,badge_sub:f,year:m,rating:"",synopsis:"",age_rating:"",episode_current:d,genres:[]})}return s}(s);return 0===n.length?(console.log("[KENG][5-7a][Motchill] getAllCinema() END — no more items"),JSON.stringify([])):(console.log("[KENG][5-7a][Motchill] getAllCinema() SUCCESS: "+n.length+" items"),JSON.stringify(n))}catch(t){return console.log("[KENG][5-7a][Motchill] getAllCinema() ERROR: "+t.message),JSON.stringify({error:t.message})}}
+/**
+ * Keng Common JS — shared utilities injected before each provider's resolver.
+ * Keep this file self-contained; it will be prepended to provider JS at deploy time.
+ *
+ * Contract: all functions are available in provider resolvers via normal JS scoping.
+ */
+
+// ── HLS Ad Detection ────────────────────────────────────────────────────────
+// Parse HLS variant playlist for SSAI ad segments.
+// Detects ad patterns in HLS segment URLs:
+//   - /adjump/ URLs
+//   - convertvN/ prefix segments (convertv7/, convertv8/, convertv9/, ...)
+//   - /vN/ prefix with segment_XXX.ts (numbered SSAI ad segments, any version)
+//
+// NOTE: every clause must evaluate to a boolean. Never compare a .test() result
+// against -1 — `-1 !== false` is true, which classifies every segment as an ad
+// and makes the whole movie look like one giant ad break.
+function _isAdSegment(segment) {
+  return segment.indexOf('/adjump/') !== -1
+      || /convertv\d+\//.test(segment)
+      || /^\/v\d+\/.*segment_/.test(segment);
+}
+
+function parseAdsFromPlaylist(playlistText) {
+  var ads = [];
+  var lines = playlistText.split('\n');
+  var cumulative = 0.0;
+  var adStart = null;
+
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (line.indexOf('#EXTINF:') !== 0) continue;
+
+    var match = line.match(/#EXTINF:([\d.]+)/);
+    if (!match) continue;
+    var duration = parseFloat(match[1]);
+    if (isNaN(duration)) continue;
+
+    var segment = (lines[i + 1] || '').trim();
+
+    if (_isAdSegment(segment)) {
+      if (adStart === null) adStart = cumulative;
+    } else {
+      if (adStart !== null) {
+        ads.push({
+          start: Math.round(adStart * 100) / 100,
+          end: Math.round(cumulative * 100) / 100,
+          duration: Math.round((cumulative - adStart) * 100) / 100,
+        });
+        adStart = null;
+      }
+    }
+    cumulative += duration;
+  }
+
+  if (adStart !== null) {
+    ads.push({
+      start: Math.round(adStart * 100) / 100,
+      end: Math.round(cumulative * 100) / 100,
+      duration: Math.round((cumulative - adStart) * 100) / 100,
+    });
+  }
+
+  return ads;
+}
+
+// Total playable duration of a playlist, in seconds.
+function _playlistTotalDuration(playlistText) {
+  var lines = playlistText.split('\n');
+  var total = 0.0;
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (line.indexOf('#EXTINF:') !== 0) continue;
+    var match = line.match(/#EXTINF:([\d.]+)/);
+    if (!match) continue;
+    var d = parseFloat(match[1]);
+    if (!isNaN(d)) total += d;
+  }
+  return Math.round(total * 100) / 100;
+}
+
+// Sanity-checked ad detection.
+// Returns an array of ad zones, or null when the result looks bogus — a
+// mis-classifying detector would otherwise report the entire movie as one ad
+// zone and the player would seek straight to the end.
+//
+// null means "detection not trustworthy" and is distinct from [] ("no ads"),
+// which the Dart side relies on (see StreamResult.ads).
+function detectAdsSafe(playlistText) {
+  var total = _playlistTotalDuration(playlistText);
+  if (total <= 0) return null;
+
+  var ads = parseAdsFromPlaylist(playlistText);
+  if (ads.length === 0) return [];
+
+  var adTotal = 0.0;
+  for (var i = 0; i < ads.length; i++) adTotal += ads[i].duration;
+
+  // Guard 1 — ads covering (nearly) the whole playlist is a detector failure,
+  // not a real stream.
+  if (adTotal >= total * 0.8) {
+    console.log('[KENG][common] Ads rejected: ' + adTotal + 's of ' + total + 's (>=80%) — treating as detection failure');
+    return null;
+  }
+
+  // Guard 2 — a single zone spanning start to end, same failure shape.
+  if (ads.length === 1 && ads[0].start <= 0.01 && ads[0].end >= total - 0.01) {
+    console.log('[KENG][common] Ads rejected: single zone spans whole playlist');
+    return null;
+  }
+
+  return ads;
+}
+
+function _isMasterPlaylist(playlistText) {
+  return playlistText.indexOf('#EXT-X-STREAM-INF') !== -1;
+}
+
+// Resolve a possibly-relative playlist reference against its base URL.
+// Handles absolute, root-relative, protocol-relative and plain relative paths.
+function _resolveUrl(ref, baseUrl) {
+  try {
+    return new URL(ref, baseUrl).href;
+  } catch (_e) {
+    return ref;
+  }
+}
+
+// First variant URI declared in a master playlist, or '' if none.
+function _firstVariantPath(masterText) {
+  var lines = masterText.split('\n');
+  for (var i = 0; i < lines.length; i++) {
+    if (lines[i].trim().indexOf('#EXT-X-STREAM-INF') !== 0) continue;
+    for (var j = i + 1; j < lines.length; j++) {
+      var t = lines[j].trim();
+      if (!t) continue;
+      if (t.charAt(0) === '#') continue;
+      return t;
+    }
+  }
+  return '';
+}
+
+// PA-class CDN. These are served as a master playlist whose variant URL must be
+// handed to the player directly — established behaviour, keep it.
+// Every other CDN keeps its original URL so the player can still do ABR.
+function _isPaCdn(url) {
+  return url.indexOf('kkphimplayer') !== -1 || url.indexOf('phim1280.tv') !== -1;
+}
+
+function _kengFetchText(url, headers, timeoutMs) {
+  var controller = new AbortController();
+  var timer = setTimeout(function () { controller.abort(); }, timeoutMs);
+  return fetch(url, { headers: headers, signal: controller.signal })
+    .then(function (resp) {
+      clearTimeout(timer);
+      if (!resp.ok) return null;
+      return resp.text();
+    })
+    .catch(function () {
+      clearTimeout(timer);
+      return null;
+    });
+}
+
+// Fetch + resolve m3u8 → ad-annotated stream result.
+// Works on any CDN: detection is driven by playlist content, not by domain.
+// Returns { type, url, headers, ads } or null on failure.
+async function resolveAdsVariant(m3u8Url, referer) {
+  var kengUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+  var origin;
+  try { origin = new URL(m3u8Url).origin; } catch (_e) { origin = ''; }
+
+  var reqHeaders = {
+    'User-Agent': kengUA,
+    'Accept': '*/*',
+    'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Referer': referer || origin + '/',
+    'Origin': origin || '',
+  };
+
+  try {
+    var firstText = await _kengFetchText(m3u8Url, reqHeaders, 2000);
+    if (firstText === null) return null;
+
+    var mediaText = firstText;
+    var variantUrl = m3u8Url;
+
+    if (_isMasterPlaylist(firstText)) {
+      var variantPath = _firstVariantPath(firstText);
+      if (!variantPath) return null;
+      variantUrl = _resolveUrl(variantPath, m3u8Url);
+
+      var variantText = await _kengFetchText(variantUrl, reqHeaders, 2000);
+      if (variantText === null) {
+        // Variant unreachable — still playable, just without ad info.
+        mediaText = '';
+      } else {
+        mediaText = variantText;
+      }
+    }
+    // else: m3u8Url is already a media playlist — parse it directly and never
+    // mistake its first segment (.ts) for a variant URL.
+
+    var ads = mediaText ? detectAdsSafe(mediaText) : null;
+    if (ads && ads.length > 0) {
+      console.log('[KENG][common] Ads detected: ' + JSON.stringify(ads));
+    }
+
+    // PA needs the resolved variant URL; everyone else keeps the original so
+    // the player retains adaptive bitrate across renditions.
+    var outUrl = _isPaCdn(m3u8Url) ? variantUrl : m3u8Url;
+
+    console.log('[KENG][common] Stream resolved: ' + outUrl + ' | ads=' + (ads === null ? 'null' : ads.length));
+    return {
+      type: 'm3u8',
+      url: outUrl,
+      headers: { 'Referer': referer, 'User-Agent': kengUA },
+      ads: ads,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+// Main entry: probe the playlist for SSAI ads → build result.
+// Usage: var result = await makeStreamM3U8Result(m3u8Url, referer);
+async function makeStreamM3U8Result(m3u8Url, referer) {
+  var kengUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+  var result = await resolveAdsVariant(m3u8Url, referer);
+  if (result) return result;
+
+  console.log('[KENG][common] Ad probe failed, falling back to original URL');
+  return {
+    type: 'm3u8',
+    url: m3u8Url,
+    headers: { 'Referer': referer, 'User-Agent': kengUA },
+  };
+}
+
+// ── Provider: motphimchillvl.com ──────────────────────────────────────
+
+// Story 12.12 — Motchill | Rail Group Homepage v3
+// Function: railGroupHomepage()
+// Fetches homepage ONCE → parses 6 rails:
+//   phim_hot, top10_series, top10_movies, new_series, new_movies, cinema
+//
+// Selectors (verified via probe 2026-04-01):
+//   phim_hot       : div.list-films.film-hot > article.item
+//   top10_series   : indexOf('most-view block') → li.item.day  (poster cross-ref from phim_hot)
+//   top10_movies   : indexOf('Top phim lẻ') → li.film-item-ver (poster inline)
+//   new_series     : div.tab-content1[data-id="1"] → ul.film-moi > li.item
+//   new_movies     : div.tab-content1[data-id="2"] → ul.film-moi > li.item
+//   cinema         : div.tab-content1[data-id="3"] → ul.film-moi > li.item
+
+async function railGroupHomepage(baseUrl) {
+    const BASE = baseUrl;
+    const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+
+    // ─── helpers ───────────────────────────────────────────────────────────
+
+    async function fetchHtml(url) {
+        const t0 = Date.now();
+        console.log('[KENG][Motchill] fetching: ' + url);
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Fetch failed ' + res.status + ': ' + url);
+        const text = await res.text();
+        console.log('[KENG][Motchill] fetched: ' + url + ' (' + (Date.now() - t0) + 'ms, ' + text.length + 'B)');
+        return text;
+    }
+
+    function extractOgImage(html) {
+        const m = html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/);
+        return m ? m[1] : '';
+    }
+
+    function cleanTitle(raw) {
+        return raw.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#039;/g, "'").trim();
+    }
+
+    function splitBadge(label) {
+        return { badge_text: label, badge_sub: '' };
+    }
+
+    function inferMediaType(badgeText) {
+        if (/tập\s*\d+/i.test(badgeText) || /^\d+\/\d+$/.test(badgeText) || /\d+\s*tập/i.test(badgeText)) {
+            return 'series';
+        }
+        return 'movie';
+    }
+
+    // ─── (1) phim_hot ──────────────────────────────────────────────────────
+
+    function parsePhimHot(html) {
+        const startIdx = html.indexOf('class="list-films film-hot"');
+        if (startIdx < 0) throw new Error('film-hot section not found');
+        const chunk = html.substring(startIdx, startIdx + 20000);
+
+        const artRe = /<article[^>]+class="item"[^>]*title="([^"]*)"[\s\S]*?<\/article>/g;
+        const items = [];
+        let m;
+        while ((m = artRe.exec(chunk)) !== null && items.length < 20) {
+            const block = m[0];
+            const title = cleanTitle(m[1]);
+            if (!title) continue;
+
+            const posterM = block.match(/data-original="([^"]+)"|<img[^>]+src="([^"]+)"/);
+            let poster = posterM ? (posterM[1] || posterM[2] || '') : '';
+            if (poster && poster.startsWith('/')) poster = BASE + poster;
+
+            const urlM = block.match(/href="(https?:\/\/[^"]+\/phim\/([^"/?]+))"/);
+            if (!urlM) continue;
+
+            const badgeM = block.match(/<span[^>]+class="label"[^>]*>([^<]+)<\/span>/);
+            const rawBadge = badgeM ? badgeM[1].trim() : '';
+            if (/trailer/i.test(rawBadge) || /trailer/i.test(title)) continue;
+
+            const { badge_text, badge_sub } = splitBadge(rawBadge);
+            const badgeSubM = block.match(/<span[^>]+class="label-quality"[^>]*>([^<]+)<\/span>/);
+            const finalBadgeSub = badge_sub || (badgeSubM ? badgeSubM[1].trim() : '');
+
+            items.push({
+                rank: 0, title, title_original: '', poster_url: poster,
+                url: urlM[1], media_type: inferMediaType(badge_text),
+                badge_text, badge_sub: finalBadgeSub,
+                year: '', rating: '', synopsis: '', age_rating: '',
+                episode_current: badge_text, genres: [], slug: urlM[2]
+            });
+        }
+        return items;
+    }
+
+    // ─── (2) top10_series ──────────────────────────────────────────────────
+
+    function parseTop10Series(html, posterMap) {
+        const sectionIdx = html.indexOf('most-view block');
+        if (sectionIdx < 0) throw new Error('most-view section not found');
+        const section = html.substring(sectionIdx, sectionIdx + 20000);
+
+        const liRe = /<li class="item day"\s*>([\s\S]*?)<\/li>/gi;
+        const items = [];
+        let lm;
+        while ((lm = liRe.exec(section)) !== null && items.length < 10) {
+            const block = lm[1];
+            const rankM = block.match(/<span[^>]*number-rank[^>]*>(\d+)<\/span>/);
+            const hrefM = block.match(/href="(https?:\/\/[^"]+\/phim\/([^"/?]+))"[^>]*title="([^"]+)"/);
+            const viewM = block.match(/<div class="count_view">([^<]+)<\/div>/);
+            if (!hrefM) continue;
+
+            const slug = hrefM[2];
+            items.push({
+                rank: rankM ? parseInt(rankM[1]) : items.length + 1,
+                title: cleanTitle(hrefM[3]), title_original: '',
+                poster_url: posterMap[slug] || '',
+                url: hrefM[1], media_type: 'series',
+                badge_text: viewM ? viewM[1].trim() : '', badge_sub: '',
+                year: '', rating: '', synopsis: '', age_rating: '',
+                episode_current: '', genres: [], slug
+            });
+        }
+        return items;
+    }
+
+    // ─── (3) top10_movies ─────────────────────────────────────────────────
+
+    function parseTop10Movies(html) {
+        const sectionIdx = html.indexOf('Top phim lẻ');
+        if (sectionIdx < 0) throw new Error('Top phim lẻ section not found');
+        const section = html.substring(sectionIdx, sectionIdx + 10000);
+
+        const liRe = /<li class="film-item-ver">([\s\S]*?)<\/li>/gi;
+        const items = [];
+        let lm;
+        while ((lm = liRe.exec(section)) !== null && items.length < 10) {
+            const block = lm[1];
+            const hrefM = block.match(/href="(https?:\/\/[^"]+\/phim\/([^"/?]+))"[^>]*title="([^"]+)"/);
+            const imgM = block.match(/data-original="(\/storage\/[^"]+)"/);
+            const yearM = block.match(/class="real-name"[^>]*>\s*([^<]+)\s*</);
+            const ratingM = block.match(/data-rating="([^"]+)"/);
+            if (!hrefM) continue;
+
+            const title = cleanTitle(hrefM[3]);
+            const rating = ratingM ? (parseFloat(ratingM[1]) / 10).toFixed(1) : '';
+
+            items.push({
+                rank: items.length + 1, title, title_original: '',
+                poster_url: imgM ? BASE + imgM[1] : '',
+                url: hrefM[1], media_type: 'movie',
+                badge_text: '', badge_sub: '',
+                year: yearM ? yearM[1].trim() : '', rating,
+                synopsis: '', age_rating: '', episode_current: '', genres: [], slug: hrefM[2]
+            });
+        }
+        return items;
+    }
+
+    // ─── (4) tab sections: new_series, new_movies, cinema ─────────────────
+
+    function parseTabSection(html, dataId, mediaType) {
+        // Find <div class="tab-content1" data-id="N">
+        const marker = 'class="tab-content1" data-id="' + dataId + '"';
+        const markerIdx = html.indexOf(marker);
+        if (markerIdx < 0) throw new Error('tab-content1 data-id=' + dataId + ' not found');
+
+        const chunk = html.substring(markerIdx, markerIdx + 12000);
+        const items = [];
+
+        // Split on <li class="item
+        const parts = chunk.split(/<li class="item/);
+        for (let i = 1; i < parts.length && items.length < 16; i++) {
+            const block = parts[i];
+            const endIdx = block.indexOf('</li>');
+            const liBody = endIdx >= 0 ? block.substring(0, endIdx) : block.substring(0, 2000);
+
+            const hrefM = liBody.match(/href="(https?:\/\/[^"]+\/phim\/([^"/?]+))"[^>]*title="([^"]+)"/);
+            const imgM = liBody.match(/data-original="(\/storage\/[^"]+)"/);
+            const labelM = liBody.match(/class="label[^"]*"[^>]*>([^<]+)</);
+            if (!hrefM) continue;
+
+            // Prefer title from .name div (includes year), fallback to href title
+            const nameTitleM = liBody.match(/class="name"[\s\S]*?title="([^"]+)"/);
+            const rawTitle = nameTitleM ? cleanTitle(nameTitleM[1]) : cleanTitle(hrefM[3]);
+            if (!rawTitle) continue;
+
+            const rawLabel = labelM ? labelM[1].trim() : '';
+            if (/trailer/i.test(rawLabel) || /trailer/i.test(rawTitle)) continue;
+
+            const { badge_text, badge_sub } = splitBadge(rawLabel);
+
+            // Strip trailing year from title (e.g. "Phim ABC 2026" → "Phim ABC", year "2026")
+            const yearM = rawTitle.match(/\b(20\d{2})\s*$/);
+            const year = yearM ? yearM[1] : '';
+            const title = yearM ? rawTitle.slice(0, -year.length).trim() : rawTitle;
+
+            items.push({
+                rank: 0, title, title_original: '',
+                poster_url: imgM ? BASE + imgM[1] : '',
+                url: hrefM[1], media_type: mediaType,
+                badge_text, badge_sub, year, rating: '',
+                synopsis: '', age_rating: '', episode_current: badge_text, genres: []
+            });
+        }
+        return items;
+    }
+
+    // ─── main ──────────────────────────────────────────────────────────────
+
+    try {
+        const tStart = Date.now();
+        console.log('[KENG][10-12][Motchill] railGroupHomepage() start');
+
+        const html = await fetchHtml(BASE);
+        console.log('[KENG][10-12][Motchill] HTML size: ' + html.length);
+
+        // Parse phim_hot first → build posterMap for top10_series cross-ref
+        const phimHotItems = parsePhimHot(html);
+        const posterMap = {};
+        for (const item of phimHotItems) {
+            if (item.slug && item.poster_url) posterMap[item.slug] = item.poster_url;
+        }
+        // Remove slug from final output
+        const phimHot = phimHotItems.map(({ slug, ...rest }) => rest);
+        console.log('[KENG][10-12][Motchill] phim_hot: ' + phimHot.length + ' items');
+
+        const top10SeriesRaw = parseTop10Series(html, posterMap);
+        // Fetch posters for top10 items not in phim_hot (in parallel)
+        const misses = top10SeriesRaw.filter(m => !m.poster_url);
+        if (misses.length > 0) {
+            console.log('[KENG][10-12][Motchill] top10_series: fetching ' + misses.length + ' missing posters');
+            const results = await Promise.allSettled(misses.map(m => fetchHtml(m.url)));
+            results.forEach((r, i) => {
+                if (r.status === 'fulfilled') misses[i].poster_url = extractOgImage(r.value);
+            });
+        }
+        const top10Series = top10SeriesRaw.map(({ slug, ...rest }) => rest);
+        console.log('[KENG][10-12][Motchill] top10_series: ' + top10Series.length + ' items');
+
+        const top10MoviesRaw = parseTop10Movies(html);
+        // Fetch posters for top10_movies misses (in parallel)
+        const movieMisses = top10MoviesRaw.filter(m => !m.poster_url);
+        if (movieMisses.length > 0) {
+            console.log('[KENG][10-12][Motchill] top10_movies: fetching ' + movieMisses.length + ' missing posters');
+            const results = await Promise.allSettled(movieMisses.map(m => fetchHtml(m.url)));
+            results.forEach((r, i) => {
+                if (r.status === 'fulfilled') movieMisses[i].poster_url = extractOgImage(r.value);
+            });
+        }
+        const top10Movies = top10MoviesRaw.map(({ slug, ...rest }) => rest);
+        console.log('[KENG][10-12][Motchill] top10_movies: ' + top10Movies.length + ' items');
+
+        const newSeries = parseTabSection(html, '1', 'series');
+        console.log('[KENG][10-12][Motchill] new_series: ' + newSeries.length + ' items');
+
+        const newMovies = parseTabSection(html, '2', 'movie');
+        console.log('[KENG][10-12][Motchill] new_movies: ' + newMovies.length + ' items');
+
+        const cinema = parseTabSection(html, '3', 'movie');
+        console.log('[KENG][10-12][Motchill] cinema: ' + cinema.length + ' items');
+
+        const result = [
+                {
+                    id: 'phim_hot',
+                    title: 'Top Phim Hot',
+                    subtitle: null,
+                    card_height_percent: 0.18,
+                    card_size_ratio: 0.667,
+                    is_hero_source: true,
+                    show_rank: false,
+                    movies: phimHot,
+                    show_cta: null
+                },
+                {
+                    id: 'top10_series',
+                    title: 'Top 10 Phim Bộ',
+                    subtitle: null,
+                    card_height_percent: 0.18,
+                    card_size_ratio: 0.667,
+                    is_hero_source: false,
+                    show_rank: true,
+                    movies: top10Series,
+                    show_cta: null
+                },
+                {
+                    id: 'top10_movies',
+                    title: 'Top 10 Phim Lẻ',
+                    subtitle: null,
+                    card_height_percent: 0.18,
+                    card_size_ratio: 0.667,
+                    is_hero_source: false,
+                    show_rank: true,
+                    movies: top10Movies,
+                    show_cta: null
+                },
+                {
+                    id: 'new_series',
+                    title: 'Phim Bộ Mới',
+                    subtitle: null,
+                    card_height_percent: 0.18,
+                    card_size_ratio: 0.667,
+                    is_hero_source: false,
+                    show_rank: false,
+                    movies: newSeries,
+                    show_cta: {
+                        js_method: 'getAllNewSeries'
+                    }
+                },
+                {
+                    id: 'new_movies',
+                    title: 'Phim Lẻ Mới',
+                    subtitle: null,
+                    card_height_percent: 0.18,
+                    card_size_ratio: 0.667,
+                    is_hero_source: false,
+                    show_rank: false,
+                    movies: newMovies,
+                    show_cta: {
+                        js_method: 'getAllNewMovies'
+                    }
+                },
+                {
+                    id: 'cinema',
+                    title: 'Phim Chiếu Rạp',
+                    subtitle: null,
+                    card_height_percent: 0.18,
+                    card_size_ratio: 0.667,
+                    is_hero_source: false,
+                    show_rank: false,
+                    movies: cinema,
+                    show_cta: {
+                        js_method: 'getAllCinema'
+                    }
+                }
+        ];
+
+        console.log('[KENG][10-12][Motchill] railGroupHomepage() SUCCESS: 6 rails, total=' + (Date.now() - tStart) + 'ms');
+        return JSON.stringify(result);
+
+    } catch (e) {
+        console.log('[KENG][10-12][Motchill] ERROR railGroupHomepage: ' + e.message);
+        return JSON.stringify({ error: e.message });
+    }
+}
+
+// Story 5-7a | Motchill | All New Series (CTA — paged)
+// Contract: getAllNewSeries(page = 1) → JSON array ([] khi hết trang)
+// Target: /danh-sach/phim-bo?page=N on the active provider origin
+
+async function getAllNewSeries(baseUrl, page = 1) {
+    const MC_BASE = baseUrl;
+    const MC_UA   = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+
+    async function fetchHtml(url) {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Fetch failed ' + res.status + ': ' + url);
+        return res.text();
+    }
+
+    function extractOgImage(html) {
+        const m = html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/);
+        return m ? m[1] : '';
+    }
+
+    function parsePage(html) {
+        const liParts = html.split('<li class="item');
+        const movies = [];
+        for (let i = 1; i < liParts.length; i++) {
+            const block = liParts[i];
+            const endIdx = block.indexOf('</li>');
+            const liBody = endIdx >= 0 ? block.substring(0, endIdx) : block.substring(0, 2000);
+
+            const hrefM  = liBody.match(/href="(https?:\/\/[^"]+\/phim\/([^"/?]+))"/);
+            const imgM   = liBody.match(/data-original="(\/storage\/[^"]+)"/);
+            const labelM = liBody.match(/class="label[^"]*"[^>]*>([^<]+)</);
+            if (!hrefM) continue;
+
+            const nameTitleM = liBody.match(/class="name"[\s\S]*?title="([^"]+)"/);
+            const rawTitle = nameTitleM
+                ? nameTitleM[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#039;/g, "'")
+                : '';
+            if (!rawTitle) continue;
+
+            const yearM = rawTitle.match(/\b(20\d{2})\s*$/);
+            const year  = yearM ? yearM[1] : '';
+            const title = yearM ? rawTitle.slice(0, -year.length).trim() : rawTitle;
+
+            const label      = labelM ? labelM[1].trim() : '';
+            if (label.toLowerCase().includes('trailer')) continue;
+            const badge_text = label;
+            const badge_sub  = '';
+
+            movies.push({
+                rank: 0, title, title_original: '',
+                poster_url: imgM ? MC_BASE + imgM[1] : '',
+                url: hrefM[1], media_type: 'series', badge_text, badge_sub,
+                year, rating: '', synopsis: '', age_rating: '',
+                episode_current: badge_text, genres: [], slug: hrefM[2]
+            });
+        }
+        return movies;
+    }
+
+    try {
+        console.log('[KENG][5-7a][Motchill] getAllNewSeries(page=' + page + ')');
+        const url = MC_BASE + '/danh-sach/phim-bo?page=' + page;
+        const html = await fetchHtml(url);
+        const movies = parsePage(html);
+
+        // Empty array = no more pages → Flutter stops endless scroll
+        if (movies.length === 0) {
+            console.log('[KENG][5-7a][Motchill] getAllNewSeries() END — no more items');
+            return JSON.stringify([]);
+        }
+
+        // Fetch missing posters
+        const misses = movies.filter(m => !m.poster_url);
+        if (misses.length > 0) {
+            const results = await Promise.allSettled(misses.map(m => fetchHtml(m.url)));
+            results.forEach((r, i) => {
+                if (r.status === 'fulfilled') misses[i].poster_url = extractOgImage(r.value);
+            });
+        }
+
+        const output = movies.map(({ slug, ...rest }) => rest);
+        console.log('[KENG][5-7a][Motchill] getAllNewSeries() SUCCESS: ' + output.length + ' items');
+        return JSON.stringify(output);
+
+    } catch (e) {
+        console.log('[KENG][5-7a][Motchill] getAllNewSeries() ERROR: ' + e.message);
+        return JSON.stringify({ error: e.message });
+    }
+}
+
+// Story 5-7a | Motchill | All New Movies (CTA — paged)
+// Contract: getAllNewMovies(page = 1) → JSON array ([] khi hết trang)
+// Target: /danh-sach/phim-le?page=N on the active provider origin
+
+async function getAllNewMovies(baseUrl, page = 1) {
+    const MC_BASE = baseUrl;
+    const MC_UA   = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+
+    async function fetchHtml(url) {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Fetch failed ' + res.status + ': ' + url);
+        return res.text();
+    }
+
+    function parsePage(html) {
+        const parts = html.split('<li class="item');
+        const movies = [];
+        for (let i = 1; i < parts.length; i++) {
+            const endIdx = parts[i].indexOf('</li>');
+            const block = endIdx >= 0 ? parts[i].substring(0, endIdx) : parts[i].substring(0, 2000);
+
+            const hrefM  = block.match(/href="(https?:\/\/[^"]+\/phim\/([^"/?]+))"/);
+            const nameM  = block.match(/class="name"[\s\S]{0,300}?title="([^"]+)"/);
+            const imgM   = block.match(/data-original="([^"]+)"/);
+            const labelM = block.match(/class="label[^"]*">([^<]+)</);
+            if (!hrefM) continue;
+
+            const rawTitle = (nameM ? nameM[1] : '')
+                .replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#039;/g, "'").trim();
+            if (!rawTitle) continue;
+
+            const label = labelM ? labelM[1].trim() : '';
+            if (label.toLowerCase().includes('trailer') || rawTitle.toLowerCase().includes('trailer')) continue;
+
+            let title = rawTitle;
+            let year  = '';
+            const yearMatch = rawTitle.match(/\s+((?:19|20)\d{2})$/);
+            if (yearMatch) { year = yearMatch[1]; title = rawTitle.replace(yearMatch[0], '').trim(); }
+
+            const badge_text = label;
+            const badge_sub  = '';
+
+            let poster = imgM ? imgM[1] : '';
+            if (poster && !poster.startsWith('http')) poster = MC_BASE + poster;
+
+            movies.push({
+                rank: 0, title, title_original: '', poster_url: poster,
+                url: hrefM[1], media_type: 'movie', badge_text, badge_sub,
+                year, rating: '', synopsis: '', age_rating: '',
+                episode_current: badge_text, genres: [],
+            });
+        }
+        return movies;
+    }
+
+    try {
+        console.log('[KENG][5-7a][Motchill] getAllNewMovies(page=' + page + ')');
+        const url = MC_BASE + '/danh-sach/phim-le?page=' + page;
+        const html = await fetchHtml(url);
+        const movies = parsePage(html);
+
+        if (movies.length === 0) {
+            console.log('[KENG][5-7a][Motchill] getAllNewMovies() END — no more items');
+            return JSON.stringify([]);
+        }
+
+        console.log('[KENG][5-7a][Motchill] getAllNewMovies() SUCCESS: ' + movies.length + ' items');
+        return JSON.stringify(movies);
+
+    } catch (e) {
+        console.log('[KENG][5-7a][Motchill] getAllNewMovies() ERROR: ' + e.message);
+        return JSON.stringify({ error: e.message });
+    }
+}
+
+// Story 5-7a | Motchill | All Cinema (CTA — paged)
+// Contract: getAllCinema(page = 1) → JSON array ([] khi hết trang)
+// Target: /danh-sach/phim-chieu-rap?page=N on the active provider origin
+
+async function getAllCinema(baseUrl, page = 1) {
+    const MC_BASE = baseUrl;
+    const MC_UA   = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+
+    async function fetchHtml(url) {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Fetch failed ' + res.status + ': ' + url);
+        return res.text();
+    }
+
+    function parsePage(html) {
+        const parts = html.split('<li class="item');
+        const movies = [];
+        for (let i = 1; i < parts.length; i++) {
+            const endIdx = parts[i].indexOf('</li>');
+            const block = endIdx >= 0 ? parts[i].substring(0, endIdx) : parts[i].substring(0, 2000);
+
+            const hrefM  = block.match(/href="(https?:\/\/[^"]+\/phim\/([^"/?]+))"/);
+            const nameM  = block.match(/class="name"[\s\S]{0,300}?title="([^"]+)"/);
+            const imgM   = block.match(/data-original="([^"]+)"/);
+            const labelM = block.match(/class="label[^"]*">([^<]+)</);
+            if (!hrefM) continue;
+
+            const rawTitle = (nameM ? nameM[1] : '')
+                .replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#039;/g, "'").trim();
+            if (!rawTitle) continue;
+
+            const label = labelM ? labelM[1].trim() : '';
+            if (label.toLowerCase().includes('trailer') || rawTitle.toLowerCase().includes('trailer')) continue;
+
+            let title = rawTitle;
+            let year  = '';
+            const yearMatch = rawTitle.match(/\s+((?:19|20)\d{2})$/);
+            if (yearMatch) { year = yearMatch[1]; title = rawTitle.replace(yearMatch[0], '').trim(); }
+
+            const badge_text = label;
+            const badge_sub  = '';
+
+            let poster = imgM ? imgM[1] : '';
+            if (poster && !poster.startsWith('http')) poster = MC_BASE + poster;
+
+            movies.push({
+                rank: 0, title, title_original: '', poster_url: poster,
+                url: hrefM[1], media_type: 'movie', badge_text, badge_sub,
+                year, rating: '', synopsis: '', age_rating: '',
+                episode_current: badge_text, genres: [],
+            });
+        }
+        return movies;
+    }
+
+    try {
+        console.log('[KENG][5-7a][Motchill] getAllCinema(page=' + page + ')');
+        const url = MC_BASE + '/danh-sach/phim-chieu-rap?page=' + page;
+        const html = await fetchHtml(url);
+        const movies = parsePage(html);
+
+        if (movies.length === 0) {
+            console.log('[KENG][5-7a][Motchill] getAllCinema() END — no more items');
+            return JSON.stringify([]);
+        }
+
+        console.log('[KENG][5-7a][Motchill] getAllCinema() SUCCESS: ' + movies.length + ' items');
+        return JSON.stringify(movies);
+
+    } catch (e) {
+        console.log('[KENG][5-7a][Motchill] getAllCinema() ERROR: ' + e.message);
+        return JSON.stringify({ error: e.message });
+    }
+}
